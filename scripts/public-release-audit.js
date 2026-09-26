@@ -80,8 +80,15 @@ else {
     const zipEntries = {};
     for (const rawName of Object.keys(rawZipEntries)) zipEntries[rawName.replace(/\\/g, "/")] = rawZipEntries[rawName];
     const names = Object.keys(zipEntries).sort();
-    const requiredEntries = ["PSAIHub-Compat/PSAIHub-Setup.exe", "PSAIHub-Compat/Debug/PSAIHub-Debug.exe", "PSAIHub-Compat/README-安装说明.txt"];
+    const requiredEntries = [
+      "PSAIHub-Compat/PSAIHub-Setup.cmd",
+      "PSAIHub-Compat/Debug/PSAIHub-Debug.cmd",
+      "PSAIHub-Compat/Installer/install.ps1",
+      "PSAIHub-Compat/Manual/PS-AI-Image-Hub-CEP11-Compat/CSXS/manifest.xml",
+      "PSAIHub-Compat/README-安装说明.txt"
+    ];
     for (const name of requiredEntries) if (!names.includes(name)) failures.push("release ZIP missing: " + name);
+    if (names.some((name) => /\.exe$/i.test(name))) failures.push("release ZIP must not distribute unsigned EXE files");
     for (const name of names) {
       if (forbiddenDataNames.test(name) || /(^|\/)(?:node_modules|tests?|logs?|USER_DATA|\.git)(\/|$)/i.test(name)) failures.push("forbidden release ZIP entry: " + name);
       if (/\.(?:md|txt|json|xml|html|css|js|jsx|ps1|psm1|cmd)$/i.test(name)) auditBuffer("release ZIP:" + name, Buffer.from(zipEntries[name]), failures);

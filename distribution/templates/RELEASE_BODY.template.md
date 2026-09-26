@@ -1,4 +1,4 @@
-# PS AI Image Hub v1.0.0
+# PS AI Image Hub v1.0.1
 
 > **仅支持 CEP 11 / Photoshop Host 23.x、24.x、25.x。Photoshop 26.x 及更高版本不受支持，请勿安装。**
 
@@ -14,12 +14,21 @@
 
 1. 下载 `PSAIHub-Compat.zip`。
 2. 完整解压到短路径，例如 `C:\PSAIHub\` 或 `D:\PSAIHub\`；不要在压缩包内直接运行安装器。
-3. 双击 `PSAIHub-Setup.exe`，按提示接受 UAC。
+3. 双击 `PSAIHub-Setup.cmd`。本版本不再把未签名 IExpress EXE 作为公开安装入口。
 4. 完成后彻底关闭并重启 Photoshop。
 5. 打开 **窗口 → 扩展（旧版）→ PS AI Image Hub**。
 6. 首次使用请自行配置 Provider 和 API Key。Release 不包含任何密钥。
 
-普通安装器无法启动或安装失败时，才使用 `Debug\PSAIHub-Debug.exe`。卸载可重新运行 Setup 并选择“卸载”，也可使用 Windows“已安装的应用”。
+普通启动脚本无法启动或安装失败时，使用 `Debug\PSAIHub-Debug.cmd`，诊断窗口会保留退出代码。如果安全策略阻止脚本，可将 `Manual\PS-AI-Image-Hub-CEP11-Compat` 复制到 `%APPDATA%\Adobe\CEP\extensions\PS-AI-Image-Hub-CEP11-Compat`，完成无需执行程序的手动安装。
+
+> Windows 仍可能提示来自互联网的 ZIP、CMD 或 PowerShell 文件存在风险。请只从本 Release 下载并核对 SHA-256；不要关闭 Defender，也不要安装来源不明或自签名根证书。
+
+## v1.0.1 安装器修复
+
+- 移除公开 ZIP 中的未签名 IExpress EXE，避免其自解压启动链被 Windows 拦截后无提示退出。
+- 默认使用透明的 `PSAIHub-Setup.cmd` 启动原有安装 UI。
+- Debug 启动器始终保留退出代码和日志位置，不再一闪即退。
+- 增加完整 CEP Runtime 手动复制兜底。
 
 ## 主要功能
 
@@ -46,4 +55,3 @@
 ```text
 {{ZIP_SHA256}}
 ```
-

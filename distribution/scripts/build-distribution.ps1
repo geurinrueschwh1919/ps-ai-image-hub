@@ -4,14 +4,14 @@ param()
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
-$distributionVersion = "v1.0.0"
-$productVersion = "1.0.0"
+$distributionVersion = "v1.0.1"
+$productVersion = "1.0.1"
 $packageFolderName = "PSAIHub-Compat"
 $zipFileName = $packageFolderName + ".zip"
-$releaseSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.0.exe"
-$debugSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.0-Debug.exe"
-$releaseFileName = "PSAIHub-Setup.exe"
-$debugFileName = "PSAIHub-Debug.exe"
+$releaseSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.1.exe"
+$debugSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.1-Debug.exe"
+$releaseFileName = "PSAIHub-Setup.cmd"
+$debugFileName = "PSAIHub-Debug.cmd"
 
 $distributionRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $distributionRoot))
@@ -20,16 +20,20 @@ $installerDist = Join-Path $projectRoot "installer\dist"
 $releaseSource = Join-Path $installerDist $releaseSourceFileName
 $debugSource = Join-Path $installerDist $debugSourceFileName
 $runtimeRoot = Join-Path $projectRoot "outputs\dev\PS-AI-Image-Hub-CEP11-Compat"
+$installerPackageRoot = Join-Path $projectRoot "installer\build\package"
+$portableReleaseSource = Join-Path $projectRoot "installer\src\launch-portable.cmd"
+$portableDebugSource = Join-Path $projectRoot "installer\src\launch-portable-debug.cmd"
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $distributionRoot "build"))
 $stagingRoot = Join-Path $buildRoot $packageFolderName
 $debugRoot = Join-Path $stagingRoot "Debug"
+$packagedInstallerRoot = Join-Path $stagingRoot "Installer"
+$manualBaseRoot = Join-Path $stagingRoot "Manual"
+$manualRuntimeRoot = Join-Path $manualBaseRoot "PS-AI-Image-Hub-CEP11-Compat"
 $distRoot = Join-Path $distributionRoot "dist"
 $reportsRoot = Join-Path $distributionRoot "reports"
 $templatesRoot = Join-Path $distributionRoot "templates"
 $zipPath = Join-Path $distRoot $zipFileName
 $zipHashPath = $zipPath + ".sha256.txt"
-$releaseDistPath = Join-Path $distRoot $releaseFileName
-$debugDistPath = Join-Path $distRoot $debugFileName
 $legacyZipPath = Join-Path $distRoot "PSAI-CEP11-Test.zip"
 $legacyZipHashPath = $legacyZipPath + ".sha256.txt"
 $reportPath = Join-Path $reportsRoot "DISTRIBUTION_BUILD_REPORT.md"
@@ -89,7 +93,14 @@ function Assert-CleanDistributionTree {
     "SHA256.txt",
     "问题反馈模板.txt",
     ("Debug\" + $debugFileName)
-  ) | Sort-Object
+  )
+  $allowedFiles += @(Get-ChildItem -LiteralPath $installerPackageRoot -Recurse -File -Force | ForEach-Object {
+    "Installer\" + $_.FullName.Substring($installerPackageRoot.Length).TrimStart("\")
+  })
+  $allowedFiles += @(Get-ChildItem -LiteralPath $runtimeRoot -Recurse -File -Force | ForEach-Object {
+    "Manual\PS-AI-Image-Hub-CEP11-Compat\" + $_.FullName.Substring($runtimeRoot.Length).TrimStart("\")
+  })
+  $allowedFiles = @($allowedFiles | Sort-Object)
   $actualFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File -Force | ForEach-Object {
     $_.FullName.Substring($Root.Length).TrimStart("\")
   } | Sort-Object)
@@ -101,8 +112,12 @@ function Assert-CleanDistributionTree {
   $actualDirectories = @(Get-ChildItem -LiteralPath $Root -Recurse -Directory -Force | ForEach-Object {
     $_.FullName.Substring($Root.Length).TrimStart("\")
   })
-  if ($actualDirectories.Count -ne 1 -or $actualDirectories[0] -ne "Debug") {
-    throw "Distribution layout must contain only the Debug directory."
+  $unexpectedDirectories = @($actualDirectories | Where-Object {
+    $_ -notin @("Debug", "Installer", "Manual", "Manual\PS-AI-Image-Hub-CEP11-Compat") -and
+    -not $_.StartsWith("Manual\PS-AI-Image-Hub-CEP11-Compat\", [StringComparison]::OrdinalIgnoreCase)
+  })
+  if ($unexpectedDirectories.Count -gt 0) {
+    throw "Distribution layout contains unexpected directories: $($unexpectedDirectories -join ', ')."
   }
 }
 
@@ -115,7 +130,7 @@ function Invoke-SecretScan {
     "(?i)Bearer\s+[A-Za-z0-9._~-]{24,}"
   )
   $hits = New-Object System.Collections.Generic.List[string]
-  $textFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object { $_.Extension -in @(".txt", ".json", ".md") })
+  $textFiles = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object { $_.Extension -in @(".txt", ".json", ".md", ".cmd", ".ps1", ".psm1") })
   foreach ($file in $textFiles) {
     $content = Get-Content -LiteralPath $file.FullName -Raw
     foreach ($pattern in $patterns) {
@@ -134,6 +149,10 @@ foreach ($requiredExe in @($releaseSource, $debugSource)) {
   if (-not (Test-Path -LiteralPath $requiredExe -PathType Leaf)) { throw "Required installer is missing: $requiredExe" }
   if ((Get-Item -LiteralPath $requiredExe).Length -le 0) { throw "Required installer is empty: $requiredExe" }
 }
+foreach ($requiredPortableFile in @($portableReleaseSource, $portableDebugSource)) {
+  if (-not (Test-Path -LiteralPath $requiredPortableFile -PathType Leaf)) { throw "Portable installer launcher is missing: $requiredPortableFile" }
+}
+if (-not (Test-Path -LiteralPath $installerPackageRoot -PathType Container)) { throw "Installer support package is missing: $installerPackageRoot" }
 
 $releaseInfo = Get-Item -LiteralPath $releaseSource
 $debugInfo = Get-Item -LiteralPath $debugSource
@@ -147,10 +166,10 @@ New-Item -ItemType Directory -Path $debugRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $reportsRoot -Force | Out-Null
 
-Copy-Item -LiteralPath $releaseSource -Destination (Join-Path $stagingRoot $releaseFileName)
-Copy-Item -LiteralPath $debugSource -Destination (Join-Path $debugRoot $debugFileName)
-Copy-Item -LiteralPath $releaseSource -Destination $releaseDistPath -Force
-Copy-Item -LiteralPath $debugSource -Destination $debugDistPath -Force
+Copy-Item -LiteralPath $portableReleaseSource -Destination (Join-Path $stagingRoot $releaseFileName)
+Copy-Item -LiteralPath $portableDebugSource -Destination (Join-Path $debugRoot $debugFileName)
+Copy-Item -LiteralPath $installerPackageRoot -Destination $packagedInstallerRoot -Recurse -Force
+Copy-Item -LiteralPath $runtimeRoot -Destination $manualRuntimeRoot -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $stagingRoot "LICENSE.txt") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD-PARTY-NOTICES.md") -Destination (Join-Path $stagingRoot "THIRD-PARTY-NOTICES.txt") -Force
 
@@ -160,11 +179,12 @@ Write-Utf8Text -Path (Join-Path $stagingRoot "README-安装说明.txt") -Content
 Write-Utf8Text -Path (Join-Path $stagingRoot "问题反馈模板.txt") -Content $feedback
 
 $checksumText = @"
-$releaseFileName
+Unsigned IExpress build artifact (not included in the public ZIP):
+$releaseSourceFileName
 SHA-256:
 $releaseHash
 
-$debugFileName
+$debugSourceFileName
 SHA-256:
 $debugHash
 "@
@@ -197,15 +217,15 @@ if ($runtimeAfter.SHA256 -ne $runtimeBefore.SHA256 -or
 }
 
 $zipContents = @(
-  "$packageFolderName/",
   "$packageFolderName/$releaseFileName",
+  "$packageFolderName/Debug/$debugFileName",
+  "$packageFolderName/Installer/ (installer support files)",
+  "$packageFolderName/Manual/PS-AI-Image-Hub-CEP11-Compat/ (manual-install fallback)",
   "$packageFolderName/README-安装说明.txt",
   "$packageFolderName/LICENSE.txt",
   "$packageFolderName/THIRD-PARTY-NOTICES.txt",
   "$packageFolderName/SHA256.txt",
-  "$packageFolderName/问题反馈模板.txt",
-  "$packageFolderName/Debug/",
-  "$packageFolderName/Debug/$debugFileName"
+  "$packageFolderName/问题反馈模板.txt"
 )
 
 function Write-BuildReport {
@@ -214,14 +234,11 @@ function Write-BuildReport {
     "# Public Release Distribution Build Report", "",
     "- Distribution Version: ``$distributionVersion / $productVersion``",
     "- Build Time: ``$([DateTime]::UtcNow.ToString('o'))``",
-    "- Release source filename: ``$releaseSourceFileName``",
-    "- Release distribution filename: ``$releaseFileName``",
-    "- Release size: ``$($releaseInfo.Length) bytes``",
-    "- Release SHA256: ``$releaseHash``",
-    "- Debug source filename: ``$debugSourceFileName``",
-    "- Debug distribution filename: ``$debugFileName``",
-    "- Debug size: ``$($debugInfo.Length) bytes``",
-    "- Debug SHA256: ``$debugHash``",
+    "- Public launcher: ``$releaseFileName`` (plain CMD; no unsigned EXE in public ZIP)",
+    "- Public debug launcher: ``Debug/$debugFileName``",
+    "- Manual fallback runtime: ``Manual/PS-AI-Image-Hub-CEP11-Compat``",
+    "- Unsigned IExpress setup retained only as build artifact: ``$releaseSourceFileName`` / ``$releaseHash``",
+    "- Unsigned IExpress debug retained only as build artifact: ``$debugSourceFileName`` / ``$debugHash``",
     "- Runtime file count: ``$($runtimeAfter.FileCount)``",
     "- Runtime total size: ``$($runtimeAfter.TotalSize) bytes``",
     "- Runtime SHA256: ``$($runtimeAfter.SHA256)``",
@@ -238,7 +255,7 @@ function Write-BuildReport {
     "- Enabled sizing shrinks oversized images through Canvas only when needed.",
     "- Smaller-than-target images keep the original PNG and use Photoshop Smart Object placement; browser Canvas never upscales them.",
     "- Equal-size images keep the original PNG and avoid unnecessary re-encoding.",
-    "", "The distribution step consumed the freshly rebuilt, hash-verified installer executables from installer/dist without modifying them.", ""
+    "", "The public ZIP intentionally uses transparent CMD/PowerShell launchers plus a manual-copy fallback. Unsigned IExpress EXEs remain local build artifacts for future trusted signing and are not distributed.", ""
   )
   Write-Utf8Text -Path $reportPath -Content ($lines -join "`r`n")
 }
@@ -249,7 +266,7 @@ $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { Write-BuildReport -TestResult "FAIL — Node.js unavailable"; throw "Node.js is required to run distribution tests." }
 & $node.Source --test $testPath
 if ($LASTEXITCODE -ne 0) { Write-BuildReport -TestResult "FAIL"; throw "Distribution tests failed." }
-Write-BuildReport -TestResult "PASS — 27/27"
+Write-BuildReport -TestResult "PASS"
 
 Write-Host "Distribution built: $zipPath"
 Write-Host "Size: $($zipInfo.Length)"

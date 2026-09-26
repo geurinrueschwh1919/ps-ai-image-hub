@@ -10,9 +10,9 @@ $runtimeCopy = Join-Path $buildRoot 'runtime'
 $packageRoot = Join-Path $buildRoot 'package'
 $distRoot = Join-Path $installerRoot 'dist'
 $reportRoot = Join-Path $installerRoot 'reports'
-$outputName = 'PS-AI-Image-Hub-Setup-v1.0.0.exe'
+$outputName = 'PS-AI-Image-Hub-Setup-v1.0.1.exe'
 $outputPath = Join-Path $distRoot $outputName
-$debugOutputName = 'PS-AI-Image-Hub-Setup-v1.0.0-Debug.exe'
+$debugOutputName = 'PS-AI-Image-Hub-Setup-v1.0.1-Debug.exe'
 $debugOutputPath = Join-Path $distRoot $debugOutputName
 $expectedFormalHash = 'ae06e989134bd56cc51f0f4678e030d34ccbd8a5279b977d067830b065dd68c9'
 
@@ -73,7 +73,7 @@ $metadata = [ordered]@{
   extensionId = Match-One '<Extension\s+Id="([^"]+)"'
   extensionVersion = Match-One '<Extension\s+Id="[^"]+"\s+Version="([^"]+)"'
   hostRange = Match-One '<Host\s+Name="PHSP"\s+Version="([^"]+)"'
-  versionLabel = 'v1.0.0'
+  versionLabel = 'v1.0.1'
 }
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'metadata.json') -Encoding UTF8
 
@@ -122,8 +122,11 @@ $($entries -join "`r`n")
   $sed | Set-Content -LiteralPath (Join-Path $buildRoot $SedFileName) -Encoding ASCII
 }
 
-New-IExpressConfig -TargetFileName $outputName -LaunchCommand 'cmd.exe /D /C launch-installer.cmd' -SedFileName 'installer.sed'
-New-IExpressConfig -TargetFileName $debugOutputName -LaunchCommand 'cmd.exe /D /C launch-installer-debug.cmd' -SedFileName 'installer-debug.sed'
+# Keep unsigned IExpress artifacts as build outputs for future Authenticode signing,
+# but do not make them the public installation path. Direct PowerShell launch avoids
+# the cmd child-process chain that Windows can terminate before install.ps1 starts.
+New-IExpressConfig -TargetFileName $outputName -LaunchCommand 'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File install.ps1' -SedFileName 'installer.sed'
+New-IExpressConfig -TargetFileName $debugOutputName -LaunchCommand 'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File install.ps1' -SedFileName 'installer-debug.sed'
 foreach ($path in @($outputPath,$debugOutputPath)) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } }
 Push-Location $buildRoot
 try {
@@ -154,7 +157,7 @@ $report = @"
 
 - Build date: $(Get-Date -Format o)
 - Installer technology: Windows IExpress + Windows PowerShell transactional installer (Inno Setup/NSIS unavailable locally)
-- Installer version: v1.0.0 / $compatVersion
+- Installer version: v1.0.1 / $compatVersion
 - Compat source path: $stagingRoot
 - Compat version: $compatVersion
 - Display name: $displayName
@@ -171,14 +174,14 @@ $report = @"
 - Debug installer size: $($debugInstallerFile.Length) bytes
 - Debug installer SHA-256: $debugInstallerHash
 - Debug output path: $debugOutputPath
-- IExpress AppLaunched: cmd.exe /D /C launch-installer.cmd
-- Debug AppLaunched: cmd.exe /D /C launch-installer-debug.cmd
+- IExpress AppLaunched: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File install.ps1
+- Debug AppLaunched: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File install.ps1
 - Package files: $($packageFiles.Name -join ', ')
 - Formal project hash before/after: $($formalBefore.aggregateSha256) / $($formalAfter.aggregateSha256)
 - Compat staging hash before/after: $($stagingBefore.aggregateSha256) / $($stagingAfter.aggregateSha256)
 - Result: **PASS**
 
-The EXE contains no Node, Python, Electron, or bundled .NET runtime. It uses Windows PowerShell and Windows-native IExpress available on the target system.
+The EXE contains no Node, Python, Electron, or bundled .NET runtime. It uses Windows PowerShell and Windows-native IExpress available on the target system. These unsigned EXEs are retained only as local build artifacts for future trusted signing and are not included in the public ZIP.
 "@
 $report | Set-Content -LiteralPath (Join-Path $reportRoot 'INSTALLER_BUILD_REPORT.md') -Encoding UTF8
 Write-Output "Installer built: $outputPath"

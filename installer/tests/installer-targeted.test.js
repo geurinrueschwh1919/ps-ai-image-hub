@@ -42,13 +42,26 @@ test("24 debug mode enabled only for detected keys", () => { let writes=0;const 
 test("25 no secret logging", () => { const s=core.sanitizeLog({apiKey:"x",prompt:"p",path:"safe"});assert.equal(s.apiKey,"[REDACTED]");assert.equal(s.path,"safe"); });
 test("26 no formal plugin mutation", () => { const source=fs.readFileSync(path.join(__dirname,"../src/install.ps1"),"utf8");assert.doesNotMatch(source,/Remove-Item[^\n]+PS-AI-Image-Hub-CEP[\s'\"](?:$|\r?\n)/); });
 test("27 correct target path", () => assert.match(core.installPaths("C:\\User").compat,/PS-AI-Image-Hub-CEP11-Compat$/));
-test("28 installer output exists", () => assert.equal(fs.existsSync(path.join(__dirname,"../dist/PS-AI-Image-Hub-Setup-v1.0.0.exe")),true));
+test("28 installer output exists", () => assert.equal(fs.existsSync(path.join(__dirname,"../dist/PS-AI-Image-Hub-Setup-v1.0.1.exe")),true));
 test("29 deterministic runtime hash manifest", () => { const file=path.join(__dirname,"../build/runtime-hashes.json");const a=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");const b=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");assert.equal(a,b); });
-test("30 IExpress release AppLaunched uses bootstrap launcher", () => assert.match(fs.readFileSync(path.join(__dirname,"../build/installer.sed"),"utf8"),/AppLaunched=cmd\.exe \/D \/C launch-installer\.cmd/));
+test("30 IExpress release directly launches Windows PowerShell", () => {
+  const sed=fs.readFileSync(path.join(__dirname,"../build/installer.sed"),"utf8");
+  assert.match(sed,/AppLaunched=powershell\.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File install\.ps1/);
+  assert.doesNotMatch(sed,/AppLaunched=cmd\.exe/i);
+});
 test("31 bootstrap launcher anchors install.ps1 to its own directory", () => assert.match(fs.readFileSync(path.join(__dirname,"../src/launch-installer.cmd"),"utf8"),/%~dp0install\.ps1/));
 test("32 startup has top-level catch and Chinese failure message", () => { const source=fs.readFileSync(path.join(__dirname,"../src/install.ps1"),"utf8");assert.match(source,/Show-InstallerStartupError -ErrorRecord \$_/);assert.match(source,/安装器启动失败/); });
 test("33 IExpress package contains every startup resource", () => { for(const name of ["install.ps1","uninstall.ps1","registryDetector.psm1","filesystemAdapter.psm1","launch-installer.cmd","launch-installer-debug.cmd","metadata.json","runtime-hashes.json","payload.zip"]) assert.equal(fs.existsSync(path.join(__dirname,"../build/package",name)),true,name); });
 test("34 PowerShell resource files are resolved from PSScriptRoot", () => { const source=fs.readFileSync(path.join(__dirname,"../src/install.ps1"),"utf8");for(const name of ["registryDetector.psm1","filesystemAdapter.psm1","metadata.json","runtime-hashes.json","payload.zip","uninstall.ps1"]) assert.match(source,new RegExp("Join-Path \\$PSScriptRoot ['\\\"]"+name.replace(".","\\.")+"['\\\"]")); });
-test("35 debug IExpress launch remains observable", () => { const sed=fs.readFileSync(path.join(__dirname,"../build/installer-debug.sed"),"utf8");const launcher=fs.readFileSync(path.join(__dirname,"../src/launch-installer.cmd"),"utf8");assert.match(sed,/AppLaunched=cmd\.exe \/D \/C launch-installer-debug\.cmd/);assert.match(launcher,/pause/i); });
+test("35 debug IExpress launch remains observable", () => { const sed=fs.readFileSync(path.join(__dirname,"../build/installer-debug.sed"),"utf8");assert.match(sed,/AppLaunched=powershell\.exe[\s\S]*-NoExit[\s\S]*-File install\.ps1/); });
 test("36 packaged payload matches generated payload", () => { const hash=(p)=>crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");assert.equal(hash(path.join(__dirname,"../build/package/payload.zip")),hash(path.join(__dirname,"../build/payload.zip"))); });
 test("37 startup logging has TEMP fallback and cannot abort UI", () => { const source=fs.readFileSync(path.join(__dirname,"../src/install.ps1"),"utf8");assert.match(source,/Join-Path \$env:TEMP 'PSAIImageHubCompatInstaller\\logs'/);assert.match(source,/function Write-SafeLog[\s\S]*?catch\s*\{\s*\}/); });
+test("38 portable launchers keep startup failures visible", () => {
+  const release=fs.readFileSync(path.join(__dirname,"../src/launch-portable.cmd"),"utf8");
+  const debug=fs.readFileSync(path.join(__dirname,"../src/launch-portable-debug.cmd"),"utf8");
+  assert.match(release,/INSTALLER_DIR=%~dp0Installer/i);
+  assert.match(release,/INSTALLER_SCRIPT=%INSTALLER_DIR%\\install\.ps1/i);
+  assert.match(release,/if not "%INSTALLER_EXIT%"=="0"[\s\S]*pause/i);
+  assert.match(debug,/Installer exit code/i);
+  assert.match(debug,/pause/i);
+});
