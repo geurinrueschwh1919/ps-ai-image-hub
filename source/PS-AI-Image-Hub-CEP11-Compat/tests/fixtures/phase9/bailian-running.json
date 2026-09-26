@@ -1,0 +1,7 @@
+{
+  "output": {
+    "task_id": "test-task-001",
+    "task_status": "RUNNING"
+  },
+  "request_id": "test-request-002"
+}

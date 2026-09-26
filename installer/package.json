@@ -1,0 +1,11 @@
+{
+  "name": "ps-ai-image-hub-cep11-compat-installer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build-time tooling and tests for the PS AI Image Hub Windows installer. The produced installer contains no Node runtime.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1",
+    "detect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/detect-photoshop.ps1"
+  }
+}

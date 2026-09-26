@@ -1,0 +1,1 @@
+{"id":"pred_test_001","status":"starting","output":null,"error":null,"urls":{"get":"https://api.replicate.com/v1/predictions/pred_test_001","cancel":"https://api.replicate.com/v1/predictions/pred_test_001/cancel"}}

@@ -1,0 +1,19 @@
+{
+  "name": "ps-ai-image-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PS AI Image Hub CEP11 source, installer, tests, and public release tooling for Photoshop hosts 23.x through 25.x.",
+  "scripts": {
+    "build:dev": "node scripts/build-dev.js",
+    "test:targeted": "node --test tests/*.test.js",
+    "test:regression": "node --test source/PS-AI-Image-Hub-CEP11-Compat/tests/*.test.js",
+    "scan": "node scripts/static-scan.js",
+    "verify:formal": "node scripts/integrity-check.js",
+    "audit:public": "node scripts/public-release-audit.js",
+    "release:prepare": "node scripts/prepare-github-release.js",
+    "verify": "node scripts/build-dev.js && node --test tests/*.test.js && node --test source/PS-AI-Image-Hub-CEP11-Compat/tests/*.test.js && node scripts/static-scan.js && node scripts/integrity-check.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

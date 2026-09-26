@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ExtensionManifest
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  ExtensionBundleId="com.psai.imagehub.compat.cep11"
+  ExtensionBundleVersion="1.0.0"
+  ExtensionBundleName="PS AI Image Hub"
+  Version="7.0">
+  <ExtensionList>
+    <Extension Id="com.psai.imagehub.compat.cep11.panel" Version="1.0.0" />
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <Host Name="PHSP" Version="[23.0,26.0)" />
+      <Host Name="PHXS" Version="[23.0,26.0)" />
+    </HostList>
+    <LocaleList>
+      <Locale Code="All" />
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="11.0" />
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.psai.imagehub.compat.cep11.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./client/index.html</MainPath>
+          <ScriptPath>./host/host.jsx</ScriptPath>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>PS AI Image Hub</Menu>
+          <Geometry>
+            <Size>
+              <Height>680</Height>
+              <Width>340</Width>
+            </Size>
+            <MinSize>
+              <Height>360</Height>
+              <Width>260</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>1600</Height>
+              <Width>1200</Width>
+            </MaxSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

@@ -1,0 +1,9 @@
+{
+  "output": {
+    "task_id": "test-task-001",
+    "task_status": "UNKNOWN",
+    "code": "TaskNotFound",
+    "message": "Task does not exist or has expired."
+  },
+  "request_id": "test-request-006"
+}

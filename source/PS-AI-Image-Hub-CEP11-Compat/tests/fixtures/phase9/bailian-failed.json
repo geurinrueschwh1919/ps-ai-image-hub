@@ -1,0 +1,9 @@
+{
+  "output": {
+    "task_id": "test-task-001",
+    "task_status": "FAILED",
+    "code": "InvalidParameter",
+    "message": "The image request was rejected."
+  },
+  "request_id": "test-request-004"
+}

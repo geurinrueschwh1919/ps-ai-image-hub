@@ -1,0 +1,19 @@
+{
+  "name": "ps-ai-image-hub-cep11-compat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CEP11 multi-version runtime for Photoshop 2022-2024 (hosts 23.x-25.x).",
+  "scripts": {
+    "check": "node scripts/validate-cep.js",
+    "test": "node --test tests/*.test.js",
+    "verify": "node scripts/validate-cep.js && node --test tests/*.test.js",
+    "prepare:extension": "node scripts/prepare-extension.js",
+    "prepare:dev": "node scripts/prepare-dev-extension.js",
+    "verify:promotion": "node scripts/promote-dev-to-stable.js --verify-only",
+    "promote:dev": "node scripts/promote-dev-to-stable.js",
+    "create:mock-png": "node scripts/create-mock-png.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,56 @@
+# Dependencies and package-manager caches
+node_modules/
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+
+# Generated runtime, installer, distribution, and release artifacts
+outputs/
+reports/
+installer/build/
+installer/dist/
+installer/reports/
+distribution/build/
+distribution/dist/
+distribution/reports/
+github-release/
+*.exe
+*.zip
+*.sha256.txt
+
+# Local user data, caches, logs, and temporary files
+USER_DATA/
+logs/
+cache/
+temp/
+tmp/
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+credentials*.json
+sensitive-provider-config.json
+localStorage*.json
+generated-*.png
+matched-*.png
+recovery-*.png
+history-*.png
+
+# IDE and OS metadata
+.idea/
+.vscode/
+.codex/
+.agents/
+*.code-workspace
+.DS_Store
+Thumbs.db
+desktop.ini

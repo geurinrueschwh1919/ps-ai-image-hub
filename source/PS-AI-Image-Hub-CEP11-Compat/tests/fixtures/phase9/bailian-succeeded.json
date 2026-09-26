@@ -1,0 +1,27 @@
+{
+  "output": {
+    "task_id": "test-task-001",
+    "task_status": "SUCCEEDED",
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "image": "https://example.com/result.png",
+              "type": "image"
+            }
+          ]
+        }
+      }
+    ],
+    "usage": {
+      "output_width": 1024,
+      "output_height": 1024,
+      "input_image_count": 0,
+      "output_image_count": 1
+    }
+  },
+  "request_id": "test-request-003"
+}

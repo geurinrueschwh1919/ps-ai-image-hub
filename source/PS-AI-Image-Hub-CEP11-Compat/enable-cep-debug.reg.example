@@ -1,0 +1,9 @@
+Windows Registry Editor Version 5.00
+
+; Photoshop 25.0 uses CEP 11. This enables unsigned CEP extensions for development only.
+; Review this file, remove the .example suffix, and import it manually only if you choose to.
+; It does not modify Photoshop licensing or activation.
+
+[HKEY_CURRENT_USER\Software\Adobe\CSXS.11]
+"PlayerDebugMode"="1"
+

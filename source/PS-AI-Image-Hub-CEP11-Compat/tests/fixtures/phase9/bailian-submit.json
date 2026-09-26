@@ -1,0 +1,7 @@
+{
+  "output": {
+    "task_status": "PENDING",
+    "task_id": "test-task-001"
+  },
+  "request_id": "test-request-001"
+}
