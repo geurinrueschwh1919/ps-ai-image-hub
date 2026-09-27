@@ -10,9 +10,9 @@ $runtimeCopy = Join-Path $buildRoot 'runtime'
 $packageRoot = Join-Path $buildRoot 'package'
 $distRoot = Join-Path $installerRoot 'dist'
 $reportRoot = Join-Path $installerRoot 'reports'
-$outputName = 'PS-AI-Image-Hub-Setup-v1.0.2.exe'
+$outputName = 'PS-AI-Image-Hub-Setup-v1.0.1.exe'
 $outputPath = Join-Path $distRoot $outputName
-$debugOutputName = 'PS-AI-Image-Hub-Setup-v1.0.2-Debug.exe'
+$debugOutputName = 'PS-AI-Image-Hub-Setup-v1.0.1-Debug.exe'
 $debugOutputPath = Join-Path $distRoot $debugOutputName
 $expectedFormalHash = 'ae06e989134bd56cc51f0f4678e030d34ccbd8a5279b977d067830b065dd68c9'
 
@@ -73,7 +73,7 @@ $metadata = [ordered]@{
   extensionId = Match-One '<Extension\s+Id="([^"]+)"'
   extensionVersion = Match-One '<Extension\s+Id="[^"]+"\s+Version="([^"]+)"'
   hostRange = Match-One '<Host\s+Name="PHSP"\s+Version="([^"]+)"'
-  versionLabel = 'v1.0.2'
+  versionLabel = 'v1.0.1'
 }
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'metadata.json') -Encoding UTF8
 
@@ -157,7 +157,7 @@ $report = @"
 
 - Build date: $(Get-Date -Format o)
 - Installer technology: Windows IExpress + Windows PowerShell transactional installer (Inno Setup/NSIS unavailable locally)
-- Installer version: v1.0.2 / $compatVersion
+- Installer version: v1.0.1 / $compatVersion
 - Compat source path: $stagingRoot
 - Compat version: $compatVersion
 - Display name: $displayName

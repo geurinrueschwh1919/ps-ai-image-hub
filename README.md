@@ -17,14 +17,14 @@
 
 1. 从 GitHub Releases 下载 `PSAIHub-Compat.zip`。
 2. **完整解压 ZIP 后再运行安装器**，不要在压缩包预览窗口中直接启动。建议解压到短路径，例如 `C:\PSAIHub\` 或 `D:\PSAIHub\`。
-3. 双击 `PSAIHub-Setup.vbs`。安装 UI 会正常显示，不会同时打开命令行终端。公开 ZIP 不分发未签名 IExpress EXE。
+3. 双击 `PSAIHub-Setup.cmd`。公开 ZIP 不再分发未签名 IExpress EXE。
 4. 安装器会检测 Photoshop、CEP 根目录与现有安装，并提供安装、修复、更新和卸载。无需手动复制扩展目录。
 5. 完全关闭并重新启动 Photoshop。
 6. 打开 **窗口 → 扩展（旧版）→ PS AI Image Hub**。
 7. 首次使用时，在设置中选择 Provider，填写自己的 API Key；然后填写提示词，按需选择主图或参考图并生成、预览、导入。
 8. 只有安装器无法启动或安装失败时，才运行 `Debug\PSAIHub-Debug.cmd`；诊断窗口会保留退出代码。反馈时请先删除日志中的私人路径和敏感信息。
 9. 如果安全策略阻止脚本，将 `Manual\PS-AI-Image-Hub-CEP11-Compat` 整个目录复制到 `%APPDATA%\Adobe\CEP\extensions\PS-AI-Image-Hub-CEP11-Compat`，即可完成无需执行程序的手动安装。
-10. 卸载时重新运行 `PSAIHub-Setup.vbs` 并选择“卸载”，也可从 Windows“已安装的应用”中卸载。默认保留本地用户数据，可在卸载提示中选择删除。
+10. 卸载时重新运行 `PSAIHub-Setup.cmd` 并选择“卸载”，也可从 Windows“已安装的应用”中卸载。默认保留本地用户数据，可在卸载提示中选择删除。
 
 公开 ZIP 中的安装启动脚本和完整手动安装目录均可直接检查。Windows 仍可能提示来自互联网的脚本存在风险；请只从本仓库 Release 下载并核对 SHA-256。项目不会要求关闭 Defender、绕过组织安全策略或安装自签名根证书。
 

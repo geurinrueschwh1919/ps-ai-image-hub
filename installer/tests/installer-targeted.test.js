@@ -42,7 +42,7 @@ test("24 debug mode enabled only for detected keys", () => { let writes=0;const 
 test("25 no secret logging", () => { const s=core.sanitizeLog({apiKey:"x",prompt:"p",path:"safe"});assert.equal(s.apiKey,"[REDACTED]");assert.equal(s.path,"safe"); });
 test("26 no formal plugin mutation", () => { const source=fs.readFileSync(path.join(__dirname,"../src/install.ps1"),"utf8");assert.doesNotMatch(source,/Remove-Item[^\n]+PS-AI-Image-Hub-CEP[\s'\"](?:$|\r?\n)/); });
 test("27 correct target path", () => assert.match(core.installPaths("C:\\User").compat,/PS-AI-Image-Hub-CEP11-Compat$/));
-test("28 installer output exists", () => assert.equal(fs.existsSync(path.join(__dirname,"../dist/PS-AI-Image-Hub-Setup-v1.0.2.exe")),true));
+test("28 installer output exists", () => assert.equal(fs.existsSync(path.join(__dirname,"../dist/PS-AI-Image-Hub-Setup-v1.0.1.exe")),true));
 test("29 deterministic runtime hash manifest", () => { const file=path.join(__dirname,"../build/runtime-hashes.json");const a=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");const b=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");assert.equal(a,b); });
 test("30 IExpress release directly launches Windows PowerShell", () => {
   const sed=fs.readFileSync(path.join(__dirname,"../build/installer.sed"),"utf8");
@@ -63,14 +63,5 @@ test("38 portable launchers keep startup failures visible", () => {
   assert.match(release,/INSTALLER_SCRIPT=%INSTALLER_DIR%\\install\.ps1/i);
   assert.match(release,/if not "%INSTALLER_EXIT%"=="0"[\s\S]*pause/i);
   assert.match(debug,/Installer exit code/i);
-  assert.match(debug,/pause/i);
-});
-test("39 normal public launcher hides the console while debug remains observable", () => {
-  const release=fs.readFileSync(path.join(__dirname,"../src/launch-portable.vbs"),"utf8");
-  const debug=fs.readFileSync(path.join(__dirname,"../src/launch-portable-debug.cmd"),"utf8");
-  assert.match(release,/shell\.Run\(commandLine, 0, True\)/i);
-  assert.match(release,/-WindowStyle Hidden/i);
-  assert.match(release,/Debug\\PSAIHub-Debug\.cmd/i);
-  assert.doesNotMatch(release,/WScript\.Shell[^\n]*\.Run[^\n]*,\s*1\s*,/i);
   assert.match(debug,/pause/i);
 });

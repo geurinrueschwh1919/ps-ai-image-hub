@@ -1,6 +1,6 @@
-# PS AI Image Hub v1.0.2 公开发布报告
+# PS AI Image Hub v1.0.1 公开发布报告
 
-- 发布准备日期：2026-09-27
+- 发布准备日期：2026-09-26
 - 主公开架构：多版本 CEP 11
 - 支持 Host：23.x / 24.x / 25.x
 - 不支持：26.x+
@@ -19,22 +19,22 @@
 
 ## 安装器与发布包
 
-- 公开安装入口：`PSAIHub-Setup.vbs`（无终端窗口）
+- 公开安装入口：`PSAIHub-Setup.cmd`
 - Debug 入口：`Debug\PSAIHub-Debug.cmd`
 - 手动安装兜底：`Manual\PS-AI-Image-Hub-CEP11-Compat`
 - 公开 ZIP 中未包含未签名 EXE
-- 本地 IExpress Setup 构建产物：413,696 bytes；SHA-256 `c833ec295427097c35fbb9194f2d1d55c8d0e5d8350333367488eb492e5b4d1f`
-- 本地 IExpress Debug 构建产物：413,696 bytes；SHA-256 `2ff80a3dfad1bce520b4091658645e650d94add36de2a8796ac1b9ddd8467264`
-- `PSAIHub-Compat.zip`：463,562 bytes；101 files；解压后 1,024,506 bytes
-- ZIP SHA-256：`fb04c16da8e56cb37b5f165f891dff27c861b34ab1b1ce8f4ebd240316b4ce83`
+- 本地 IExpress Setup 构建产物：413,696 bytes；SHA-256 `07e7b116fd5b470516ad60238ef6debd6175ba22d24a7dd689f13cb86aa3701d`
+- 本地 IExpress Debug 构建产物：413,696 bytes；SHA-256 `983e8028bd01e89acb53f7310bbbc42d73474da5b0f43ffe28c4c01a6de5325c`
+- `PSAIHub-Compat.zip`：463,029 bytes；105 entries；解压后 1,023,357 bytes
+- ZIP SHA-256：`87776552b8f0c0c05bed7bd1a507f0732da78959da279a0d57f0f61c60d4471a`
 
 ## 验证
 
 - Targeted / parity：40 passed
 - Full regression：637 passed / 0 failed / 1 skipped
-- Installer targeted tests：39 passed
+- Installer targeted tests：38 passed
 - PowerShell install/repair/update/rollback/uninstall integration：PASS
-- Distribution tests：31 passed（包含 VBS 无终端启动配置、打包完整性与安装器主体启动验证）
+- Distribution tests：30 passed（包含从解压后 ZIP 经 `PSAIHub-Setup.cmd` 到安装器主体的真实启动链）
 - CEP integrity：PASS
 - Static compatibility：PASS
 - PS23 / PS24 / PS25 fixtures：PASS
