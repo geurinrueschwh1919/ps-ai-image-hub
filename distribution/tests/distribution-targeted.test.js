@@ -12,9 +12,9 @@ const distributionRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(distributionRoot, "..");
 const folderName = "PSAIHub-Compat";
 const zipName = folderName + ".zip";
-const releaseSourceName = "PS-AI-Image-Hub-Setup-v1.0.1.exe";
-const debugSourceName = "PS-AI-Image-Hub-Setup-v1.0.1-Debug.exe";
-const releaseName = "PSAIHub-Setup.cmd";
+const releaseSourceName = "PS-AI-Image-Hub-Setup-v1.0.2.exe";
+const debugSourceName = "PS-AI-Image-Hub-Setup-v1.0.2-Debug.exe";
+const releaseName = "PSAIHub-Setup.vbs";
 const debugName = "PSAIHub-Debug.cmd";
 const zipPath = path.join(distributionRoot, "dist", zipName);
 const zipHashPath = zipPath + ".sha256.txt";
@@ -60,11 +60,12 @@ function checksumFor(name) {
 test.after(() => fs.rmSync(roundtripRoot, { recursive: true, force: true }));
 
 test("1 local unsigned IExpress artifacts exist for future signing", () => { assert.ok(fs.statSync(installerReleasePath).size > 0); assert.ok(fs.statSync(installerDebugPath).size > 0); });
-test("2 public release uses transparent CMD launcher", () => {
-  assert.equal(sha256(releasePath), sha256(path.join(projectRoot, "installer", "src", "launch-portable.cmd")));
+test("2 public release uses a windowless VBS launcher", () => {
+  assert.equal(sha256(releasePath), sha256(path.join(projectRoot, "installer", "src", "launch-portable.vbs")));
   const launcher=fs.readFileSync(releasePath, "utf8");
-  assert.match(launcher, /INSTALLER_DIR=%~dp0Installer/i);
-  assert.match(launcher, /INSTALLER_SCRIPT=%INSTALLER_DIR%\\install\.ps1/i);
+  assert.match(launcher, /BuildPath\(scriptDirectory, "Installer"\)/i);
+  assert.match(launcher, /shell\.Run\(commandLine, 0, True\)/i);
+  assert.match(launcher, /-WindowStyle Hidden/i);
 });
 test("3 public debug launcher is observable", () => {
   assert.equal(sha256(debugPath), sha256(path.join(projectRoot, "installer", "src", "launch-portable-debug.cmd")));
@@ -84,7 +85,7 @@ test("7 SHA256 exists", () => assert.ok(fs.statSync(checksumPath).size > 0));
 test("8 ZIP exists", () => assert.ok(fs.statSync(zipPath).size > 0));
 test("9 ZIP can open", () => assert.equal(expanded.status, 0));
 test("10 root folder correct", () => assert.deepEqual(fs.readdirSync(roundtripRoot), [folderName]));
-test("11 Setup CMD at root", () => assert.ok(fs.existsSync(releasePath)));
+test("11 windowless Setup VBS is at root", () => assert.ok(fs.existsSync(releasePath)));
 test("12 Debug under Debug", () => assert.ok(fs.existsSync(debugPath)));
 test("13 no source or forbidden project content", () => {
   const forbidden = /(^|\/)(?:source|node_modules|src|build|reports|\.git|\.env|USER_DATA)(\/|$)/i;
@@ -107,7 +108,7 @@ test("17 README contains PS23, PS24 and PS25", () => {
   }
 });
 test("18 README contains reliable and manual install instructions", () => {
-  assert.match(readme, /【安装方法】[\s\S]*完全关闭 Photoshop[\s\S]*解压整个 ZIP[\s\S]*PSAIHub-Setup\.cmd/);
+  assert.match(readme, /【安装方法】[\s\S]*完全关闭 Photoshop[\s\S]*解压整个 ZIP[\s\S]*PSAIHub-Setup\.vbs/);
   assert.match(readme, /【手动安装兜底】[\s\S]*Manual\\PS-AI-Image-Hub-CEP11-Compat/);
 });
 test("19 README contains image-quality protection description", () => {
@@ -120,7 +121,7 @@ test("20 README contains quality-protected Smart Object upscale behavior", () =>
   assert.match(readme, /4096×2160[\s\S]*1920×1080[\s\S]*允许缩小匹配/);
   assert.match(readme, /相同尺寸[\s\S]*不重新缩放、不重新编码/);
 });
-test("21 README contains uninstall instructions", () => assert.match(readme, /【卸载】[\s\S]*重新运行[\s\S]*PSAIHub-Setup\.cmd[\s\S]*卸载/));
+test("21 README contains uninstall instructions", () => assert.match(readme, /【卸载】[\s\S]*重新运行[\s\S]*PSAIHub-Setup\.vbs[\s\S]*卸载/));
 test("22 Feedback template contains image quality section", () => {
   for (const label of ["画质测试", "网站端图片尺寸", "插件图片尺寸", "Photoshop 画布尺寸", "“匹配主图区域”",
     "小图到大区域", "大图到小区域", "相同尺寸", "Photoshop 100% 视图下结果"]) assert.ok(feedback.includes(label));
@@ -157,11 +158,16 @@ test("29 unsigned IExpress hashes are documented but binaries are not distribute
   assert.equal(checksumFor(releaseSourceName),sha256(installerReleasePath));
   assert.equal(checksumFor(debugSourceName),sha256(installerDebugPath));
 });
-test("30 public Setup CMD reaches the packaged installer from the extracted ZIP", () => {
-  const result=spawnSync("cmd.exe",["/D","/C",releasePath],{
+test("30 packaged installer reached by Setup VBS passes startup validation", () => {
+  const result=spawnSync("powershell.exe",["-NoLogo","-NoProfile","-ExecutionPolicy","Bypass","-File",path.join(installerSupportPath,"install.ps1"),"-Action","ValidateStartup"],{
     encoding:"utf8",
-    env:{...process.env,PSAIHUB_INSTALLER_VALIDATE_ONLY:"1"}
+    env:{...process.env}
   });
   assert.equal(result.status,0,result.stdout+result.stderr);
   assert.match(result.stdout+result.stderr,/PASS: installer startup resources loaded/);
+});
+test("31 public normal launcher does not expose a console window", () => {
+  const launcher=fs.readFileSync(releasePath,"utf8");
+  assert.match(launcher,/shell\.Run\(commandLine, 0, True\)/i);
+  assert.doesNotMatch(launcher,/cmd\.exe/i);
 });

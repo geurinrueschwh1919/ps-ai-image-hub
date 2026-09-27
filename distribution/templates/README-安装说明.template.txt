@@ -36,7 +36,7 @@ Debug 窗口会保留退出代码，不再一闪即退。安装日志位于：
 反馈日志前请删除 API Key、Token、Authorization Header、私人路径和个人数据。
 
 【Windows 安全提示】
-v1.0.1 公开 ZIP 不再分发未签名 IExpress EXE。Windows 仍可能对来自互联网的 ZIP、CMD 或 PowerShell 显示安全提示；请只从本项目 GitHub Release 下载并核对 SHA-256。项目不会提供自签名证书，也不会要求关闭 Defender 或绕过组织安全策略。
+v1.0.2 公开 ZIP 使用无终端窗口的 VBS 启动器，不再分发未签名 IExpress EXE。Windows 仍可能对来自互联网的 ZIP、VBS 或 PowerShell 显示安全提示；请只从本项目 GitHub Release 下载并核对 SHA-256。项目不会提供自签名证书，也不会要求关闭 Defender 或绕过组织安全策略。
 
 【卸载】
 重新运行安装器 {{RELEASE_FILENAME}} 并选择“卸载”，或从 Windows“已安装的应用”中卸载。
