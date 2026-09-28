@@ -25,6 +25,7 @@
     keys[CODES.FILE_TOO_LARGE] = "presetErrorFileTooLarge"; keys[CODES.PACK_INVALID] = "presetErrorPackInvalid";
     keys[CODES.ZIP_INVALID] = "presetErrorZipInvalid";
     keys[CODES.LIMIT_EXCEEDED] = "presetErrorLimitExceeded";
+    keys[CODES.STORAGE_WRITE_FAILED] = "presetErrorStorageWrite";
     return keys[error && error.code] || "presetErrorUnknown";
   }
   function writePresetToPrompt(textarea, compiled, mode) {
@@ -342,7 +343,16 @@
     resetCurrentName() { try { if (!this.currentLibraryPreset) return; var id = this.currentLibraryPreset.id; this.registry.resetDisplayName(id); this.refreshList(id); this.renderStack(this.selectedStackId); this.setMessage("promptPresetNameRestored", false); } catch (error) { this.showError(error); } }
     restoreFactories() { try { this.registry.restoreAllFactories(); this.refreshCategories(); this.refreshList(""); this.setMessage("promptPresetFactoryRestored", false); } catch (error) { this.showError(error); } }
     removeCurrent() {
-      try { if (!this.currentLibraryPreset) throw new normalizer.PromptPresetError(CODES.NOT_FOUND, "Selected preset no longer exists."); var id = this.currentLibraryPreset.id; if (this.stack) this.stack.remove(id); this.registry.remove(id); this.refreshCategories(); this.refreshList(""); this.renderStack(""); this.setMessage("promptPresetRemoved", false); }
+      try {
+        if (!this.currentLibraryPreset) throw new normalizer.PromptPresetError(CODES.NOT_FOUND, "Selected preset no longer exists.");
+        var id = this.currentLibraryPreset.id, factory = this.currentLibraryPreset.factory === true;
+        if (factory && this.stack) this.stack.remove(id);
+        this.registry.remove(id);
+        if (!factory && this.stack && typeof this.stack.reload === "function") this.stack.reload();
+        this.refreshCategories(); this.refreshList(""); this.renderStack("");
+        this.setMessage(this.registry.wasLastDeletePersistent && !this.registry.wasLastDeletePersistent()
+          ? "presetStorageTemporaryWarning" : "promptPresetRemoved", false);
+      }
       catch (error) { this.showError(error); }
     }
     applyCurrent() {

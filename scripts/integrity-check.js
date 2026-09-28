@@ -7,8 +7,8 @@ const { scanTree } = require("./tree-hash");
 
 const projectRoot = path.resolve(__dirname, "..");
 const formalRoot = path.resolve(projectRoot, "..", "adobe-photoshop-uxp-ps-ai-image");
-// Formal baseline captured after the 2026-09-14 Stable release finalization.
-const expected = { fileCount: 468, totalSize: 5003103, aggregateSha256: "ae06e989134bd56cc51f0f4678e030d34ccbd8a5279b977d067830b065dd68c9" };
+// Formal baseline captured after the verified Prompt Preset delete-persistence fix.
+const expected = { fileCount: 469, totalSize: 5020952, aggregateSha256: "f238bc372fe326cf79e76cad47b4308b097c30d3235e4788a0a4fa48806f18fd" };
 const actual = scanTree(formalRoot);
 const git = spawnSync("git", ["-C", formalRoot, "status", "--short", "--branch"], { encoding: "utf8" });
 const pass = actual.fileCount === expected.fileCount && actual.totalSize === expected.totalSize && actual.aggregateSha256 === expected.aggregateSha256;

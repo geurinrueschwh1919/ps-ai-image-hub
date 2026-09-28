@@ -125,7 +125,9 @@
       maxHistoryCount: 50 });
     bootStage = "prompt-preset";
     var promptPresetStore = optionalModule("BOOT_PROMPT_PRESET_STORE", function createPromptPresetStore() {
-      return typeof hub.PromptPresetStore === "function" ? new hub.PromptPresetStore({ storage: localStorageCompat.storage }) : null;
+      return typeof hub.PromptPresetStore === "function" ? new hub.PromptPresetStore({
+        storage: localStorageCompat.storage, persistent: localStorageCompat.persistent
+      }) : null;
     });
     var promptPresetRegistry = optionalModule("BOOT_PROMPT_PRESET_REGISTRY", function createPromptPresetRegistry() {
       return promptPresetStore && typeof hub.PromptPresetRegistry === "function"

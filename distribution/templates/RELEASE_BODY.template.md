@@ -1,4 +1,4 @@
-# PS AI Image Hub v1.0.1
+# PS AI Image Hub v1.0.2
 
 > **仅支持 CEP 11 / Photoshop Host 23.x、24.x、25.x。Photoshop 26.x 及更高版本不受支持，请勿安装。**
 
@@ -22,6 +22,13 @@
 普通启动脚本无法启动或安装失败时，使用 `Debug\PSAIHub-Debug.cmd`，诊断窗口会保留退出代码。如果安全策略阻止脚本，可将 `Manual\PS-AI-Image-Hub-CEP11-Compat` 复制到 `%APPDATA%\Adobe\CEP\extensions\PS-AI-Image-Hub-CEP11-Compat`，完成无需执行程序的手动安装。
 
 > Windows 仍可能提示来自互联网的 ZIP、CMD 或 PowerShell 文件存在风险。请只从本 Release 下载并核对 SHA-256；不要关闭 Defender，也不要安装来源不明或自签名根证书。
+
+## v1.0.2 更新
+
+- 修复用户 Prompt Preset 删除后重启 Photoshop 又恢复的问题。
+- 删除时同步清理 Favorites、Recent、Preset Stack、重命名与参数值关联状态。
+- 保留完整 Prompt Preset UI、JSON/ZIP 导入、分类、收藏、搜索和组合功能。
+- 延续 v1.0.1 的透明 CMD 安装入口、Debug 诊断入口和手动安装兜底。
 
 ## v1.0.1 安装器修复
 

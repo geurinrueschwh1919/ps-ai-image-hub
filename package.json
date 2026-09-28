@@ -1,6 +1,6 @@
 {
   "name": "ps-ai-image-hub",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "PS AI Image Hub CEP11 source, installer, tests, and public release tooling for Photoshop hosts 23.x through 25.x.",
   "scripts": {

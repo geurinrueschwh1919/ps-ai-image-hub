@@ -4,12 +4,12 @@ param()
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
-$distributionVersion = "v1.0.1"
-$productVersion = "1.0.1"
+$distributionVersion = "v1.0.2"
+$productVersion = "1.0.2"
 $packageFolderName = "PSAIHub-Compat"
 $zipFileName = $packageFolderName + ".zip"
-$releaseSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.1.exe"
-$debugSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.1-Debug.exe"
+$releaseSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.2.exe"
+$debugSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.2-Debug.exe"
 $releaseFileName = "PSAIHub-Setup.cmd"
 $debugFileName = "PSAIHub-Debug.cmd"
 

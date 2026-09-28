@@ -32,6 +32,7 @@
       return this.items;
     }
     persist() { this.normalize(); if (this.store && this.store.setStack) this.store.setStack(this.items); return this.list(); }
+    reload() { this.items = this.store && this.store.getStack ? this.store.getStack() : []; this.normalize(); return this.list(); }
     list() { return this.items.map(copy); }
     get(id) { var item = this.items.find(function match(value) { return value.presetId === String(id || ""); }); return copy(item || null); }
     add(id) {

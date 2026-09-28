@@ -15,6 +15,13 @@
   var MAX_RECENT = 10;
 
   function copy(value) { return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }
+  function restoreValue(storage, key, value) {
+    if (value === null || value === undefined) storage.removeItem(key);
+    else storage.setItem(key, value);
+  }
+  function hasPreset(presets, id) {
+    return (Array.isArray(presets) ? presets : []).some(function match(item) { return item && item.id === id; });
+  }
   function emptyState() {
     return { version: STORE_VERSION, presets: [], favorites: [], recent: [], displayNames: {}, lastValues: {}, stack: [], hiddenFactoryPresetIds: [] };
   }
@@ -66,10 +73,13 @@
 
   class PromptPresetStore {
     constructor(options) {
-      this.storage = options && options.storage || root.localStorage;
+      var settings = options || {};
+      this.storage = settings.storage || root.localStorage;
+      this.persistent = settings.persistent !== undefined ? settings.persistent !== false : Boolean(this.storage);
       this.state = null;
       this.migrationFailed = false;
     }
+    isPersistent() { return this.persistent; }
     migrateLegacy() {
       var state = emptyState();
       if (!this.storage) return state;
@@ -106,16 +116,46 @@
       }
       return copy(state);
     }
-    writeState(value) {
+    writeState(value, context) {
       var state = sanitizeState(value);
-      this.state = state;
-      if (this.storage) {
-        this.storage.setItem(STORAGE_KEY, JSON.stringify(state));
-        // Keep the Phase 10P keys readable for rollback builds; V2 remains authoritative.
-        this.storage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(state.presets));
-        if (state.recent[0] && state.recent[0].id) this.storage.setItem(LEGACY_RECENT_KEY, state.recent[0].id);
+      if (!this.storage) { this.state = state; return copy(state); }
+      var operation = context && context.operation || "write preset state";
+      var presetId = String(context && context.presetId || "");
+      var v2Text = JSON.stringify(state);
+      var v1Text = JSON.stringify(state.presets);
+      var recentText = state.recent[0] && state.recent[0].id ? state.recent[0].id : null;
+      var previous = {}, activeKey = STORAGE_KEY, rollbackErrors = [], writtenKeys = [];
+      try {
+        previous[STORAGE_KEY] = this.storage.getItem(STORAGE_KEY);
+        previous[LEGACY_STORAGE_KEY] = this.storage.getItem(LEGACY_STORAGE_KEY);
+        previous[LEGACY_RECENT_KEY] = this.storage.getItem(LEGACY_RECENT_KEY);
+        activeKey = STORAGE_KEY; this.storage.setItem(STORAGE_KEY, v2Text); writtenKeys.push(STORAGE_KEY);
+        activeKey = LEGACY_STORAGE_KEY; this.storage.setItem(LEGACY_STORAGE_KEY, v1Text); writtenKeys.push(LEGACY_STORAGE_KEY);
+        activeKey = LEGACY_RECENT_KEY;
+        if (recentText) this.storage.setItem(LEGACY_RECENT_KEY, recentText);
         else this.storage.removeItem(LEGACY_RECENT_KEY);
+        writtenKeys.push(LEGACY_RECENT_KEY);
+        activeKey = STORAGE_KEY;
+        if (this.storage.getItem(STORAGE_KEY) !== v2Text) throw new Error("Preset V2 write verification failed.");
+        activeKey = LEGACY_STORAGE_KEY;
+        if (this.storage.getItem(LEGACY_STORAGE_KEY) !== v1Text) throw new Error("Preset V1 write verification failed.");
+        if (context && typeof context.verify === "function") {
+          context.verify(JSON.parse(this.storage.getItem(STORAGE_KEY) || "{}"), JSON.parse(this.storage.getItem(LEGACY_STORAGE_KEY) || "[]"));
+        }
+      } catch (error) {
+        writtenKeys.reverse().forEach((key) => {
+          try { restoreValue(this.storage, key, previous[key]); }
+          catch (rollbackError) { rollbackErrors.push({ storageKey: key, errorName: rollbackError && rollbackError.name || "Error", errorMessage: String(rollbackError && rollbackError.message || rollbackError) }); }
+        });
+        var details = { storageKey: activeKey, operation: operation, presetId: presetId, persistent: this.persistent,
+          serializedSize: v2Text.length + v1Text.length, errorName: error && error.name || "Error",
+          errorMessage: String(error && error.message || error), rollbackErrors: rollbackErrors };
+        var hub = root.PSAIImageHubCompat || {};
+        try { if (hub.logger && typeof hub.logger.error === "function") hub.logger.error("Prompt preset storage write failed", details); } catch (loggingError) {}
+        throw new normalizer.PromptPresetError(normalizer.PROMPT_PRESET_ERROR_CODES.STORAGE_WRITE_FAILED,
+          "Prompt preset local storage write failed.", details);
       }
+      this.state = state;
       return copy(state);
     }
     update(mutator) {
@@ -173,6 +213,24 @@
         state.stack = state.stack.filter(function keep(item) { return item.presetId !== value; });
         delete state.displayNames[value]; delete state.lastValues[value];
       });
+    }
+    deletePreset(id) {
+      var value = String(id || ""), state = this.loadState();
+      if (!value || !hasPreset(state.presets, value)) throw new normalizer.PromptPresetError(normalizer.PROMPT_PRESET_ERROR_CODES.NOT_FOUND, "Selected preset no longer exists.");
+      state.presets = state.presets.filter(function keep(item) { return item.id !== value; });
+      state.favorites = state.favorites.filter(function keep(item) { return item !== value; });
+      state.recent = state.recent.filter(function keep(item) { return item.id !== value; });
+      state.stack = state.stack.filter(function keep(item) { return item.presetId !== value; });
+      delete state.displayNames[value]; delete state.lastValues[value];
+      var written = this.writeState(state, { operation: "delete preset", presetId: value,
+        verify: function verify(v2State, v1Presets) {
+          if (hasPreset(v2State && v2State.presets, value) || hasPreset(v1Presets, value)) throw new Error("Deleted preset remained in persisted storage.");
+        } });
+      if (!this.persistent) {
+        var hub = root.PSAIImageHubCompat || {};
+        try { if (hub.logger && typeof hub.logger.warn === "function") hub.logger.warn("Prompt preset change is session-only", { operation: "delete preset", presetId: value, persistent: false }); } catch (loggingError) {}
+      }
+      return { state: written, persistent: this.persistent };
     }
   }
 

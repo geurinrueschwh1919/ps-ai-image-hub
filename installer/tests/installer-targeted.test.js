@@ -42,7 +42,7 @@ test("24 debug mode enabled only for detected keys", () => { let writes=0;const 
 test("25 no secret logging", () => { const s=core.sanitizeLog({apiKey:"x",prompt:"p",path:"safe"});assert.equal(s.apiKey,"[REDACTED]");assert.equal(s.path,"safe"); });
 test("26 no formal plugin mutation", () => { const source=fs.readFileSync(path.join(__dirname,"../src/install.ps1"),"utf8");assert.doesNotMatch(source,/Remove-Item[^\n]+PS-AI-Image-Hub-CEP[\s'\"](?:$|\r?\n)/); });
 test("27 correct target path", () => assert.match(core.installPaths("C:\\User").compat,/PS-AI-Image-Hub-CEP11-Compat$/));
-test("28 installer output exists", () => assert.equal(fs.existsSync(path.join(__dirname,"../dist/PS-AI-Image-Hub-Setup-v1.0.1.exe")),true));
+test("28 installer output exists", () => assert.equal(fs.existsSync(path.join(__dirname,"../dist/PS-AI-Image-Hub-Setup-v1.0.2.exe")),true));
 test("29 deterministic runtime hash manifest", () => { const file=path.join(__dirname,"../build/runtime-hashes.json");const a=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");const b=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");assert.equal(a,b); });
 test("30 IExpress release directly launches Windows PowerShell", () => {
   const sed=fs.readFileSync(path.join(__dirname,"../build/installer.sed"),"utf8");

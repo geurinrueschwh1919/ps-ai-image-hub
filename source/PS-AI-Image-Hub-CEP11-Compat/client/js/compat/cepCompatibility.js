@@ -31,7 +31,7 @@
     var settings = options || {};
     return redactDiagnostics({
       build: "CEP11 Multi-Version Release",
-      version: "1.0.0",
+      version: "1.0.2",
       host: settings.host || null,
       profile: settings.profile || "UNKNOWN_CEP11",
       cepRuntime: settings.cepRuntime || detectCepRuntime(root),

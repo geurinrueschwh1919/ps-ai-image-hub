@@ -14,6 +14,8 @@ const formalNormalizer = moduleAt(formalRoot, "client/js/presets/promptPresetNor
 const compatNormalizer = moduleAt(compatRoot, "client/js/presets/promptPresetNormalizer");
 const formalRegistryApi = moduleAt(formalRoot, "client/js/presets/promptPresetRegistry");
 const compatRegistryApi = moduleAt(compatRoot, "client/js/presets/promptPresetRegistry");
+const formalStoreApi = moduleAt(formalRoot, "client/js/presets/promptPresetStore");
+const compatStoreApi = moduleAt(compatRoot, "client/js/presets/promptPresetStore");
 const formalZip = moduleAt(formalRoot, "client/js/presets/promptPresetZip");
 const compatZip = moduleAt(compatRoot, "client/js/presets/promptPresetZip");
 const fflate = moduleAt(formalRoot, "client/lib/fflate.min.js");
@@ -41,6 +43,11 @@ function stateStore(presets) {
 }
 
 function normalized(api, value) { return api.normalizePromptPreset(value, { sourceKind: "structured" }); }
+function memoryStorage() {
+  const values = new Map();
+  return { getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); }, removeItem(key) { values.delete(key); } };
+}
 
 test("Formal / Compat preset normalization preserves the same business schema", () => {
   const fixture = { id: "parity-one", title: "Parity", category: "portrait", subCategory: "studio",
@@ -61,6 +68,19 @@ test("Formal / Compat Favorites and search filtering return the same preset IDs"
   formal.toggleFavorite("imported"); compat.toggleFavorite("imported");
   assert.deepEqual(compat.list({ category: "**favorites**" }).map((item) => item.id), formal.list({ category: "**favorites**" }).map((item) => item.id));
   assert.deepEqual(compat.list({ category: "**favorites**", search: "neon" }).map((item) => item.id), formal.list({ category: "**favorites**", search: "neon" }).map((item) => item.id));
+});
+
+test("Formal / Compat atomic preset deletion produces the same persisted state", () => {
+  function run(Store, Registry) {
+    const storage = memoryStorage(); const store = new Store({ storage });
+    store.writeState({ presets: [{ id: "remove", title: "Remove", category: "other", promptTemplate: "x" },
+      { id: "keep", title: "Keep", category: "other", promptTemplate: "y" }], favorites: ["remove"],
+      recent: [{ id: "remove", appliedAt: "now" }], displayNames: { remove: "R" }, lastValues: { remove: { x: 1 } },
+      stack: [{ presetId: "remove", enabled: true, values: {} }], hiddenFactoryPresetIds: [] });
+    const registry = new Registry({ store }); registry.remove("remove"); return store.loadState();
+  }
+  assert.deepEqual(run(compatStoreApi.PromptPresetStore, compatRegistryApi.PromptPresetRegistry),
+    run(formalStoreApi.PromptPresetStore, formalRegistryApi.PromptPresetRegistry));
 });
 
 test("Formal / Compat ZIP import scans nested JSON with matching results", () => {

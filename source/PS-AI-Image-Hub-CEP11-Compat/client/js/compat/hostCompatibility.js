@@ -6,7 +6,7 @@
   Object.assign(root.PSAIImageHubCompat, api);
 }(typeof globalThis !== "undefined" ? globalThis : this, function createHostCompatibility(root) {
   "use strict";
-  var EMPTY_HOST = { hostName: "unknown", hostVersion: "unknown", hostMajor: null, os: "unknown", extensionVersion: "1.0.0" };
+  var EMPTY_HOST = { hostName: "unknown", hostVersion: "unknown", hostMajor: null, os: "unknown", extensionVersion: "1.0.2" };
   var CAPABILITY_NAMES = ["documentAccess", "currentCanvasExport", "currentSelectionExport", "layerImport", "tempDocumentWorkflow", "fileOpen"];
 
   function cloneEmptyHost() {

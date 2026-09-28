@@ -68,10 +68,11 @@ let releaseFiles = [];
 if (!fs.existsSync(releaseRoot)) failures.push("github-release staging is missing");
 else {
   releaseFiles = fs.readdirSync(releaseRoot).sort();
-  const expected = ["PSAIHub-Compat.sha256.txt", "PSAIHub-Compat.zip", "RELEASE_BODY.md"].sort();
+  const expected = ["PSAIHub-Setup.exe", "PSAIHub-Debug.exe", "PSAIHub-Compat.sha256.txt", "PSAIHub-Compat.zip", "RELEASE_BODY.md"].sort();
   if (JSON.stringify(releaseFiles) !== JSON.stringify(expected)) failures.push("unexpected github-release layout");
   for (const name of releaseFiles) {
     const file = path.join(releaseRoot, name);
+    if (fs.statSync(file).size === 0) failures.push("empty github-release artifact: " + name);
     if (/\.(?:md|txt)$/i.test(name)) auditBuffer("github-release/" + name, fs.readFileSync(file), failures);
   }
   const zipPath = path.join(releaseRoot, "PSAIHub-Compat.zip");

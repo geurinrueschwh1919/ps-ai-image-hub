@@ -1,5 +1,12 @@
 # 更新日志
 
+## 1.0.2 — 2026-09-28
+
+- 修复用户 Prompt Preset 删除后重启 Photoshop 又恢复的问题。
+- 删除预设时同步清理 Favorites、Recent、Preset Stack、重命名和参数值关联状态。
+- 增加存储写入校验与失败回滚，避免 UI 与持久化状态不一致。
+- 保留完整 Prompt Preset UI、Provider、History、Recovery、Photoshop Import 和安装行为。
+
 ## 1.0.1 — 2026-09-26
 
 - 修复公开安装包在部分 Windows 10/11 环境中通过 IExpress 启动后立即退出且未留下主体日志的问题。

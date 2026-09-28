@@ -1,6 +1,6 @@
-# PS AI Image Hub v1.0.1 公开发布报告
+# PS AI Image Hub v1.0.2 公开发布报告
 
-- 发布准备日期：2026-09-26
+- 发布准备日期：2026-09-28
 - 主公开架构：多版本 CEP 11
 - 支持 Host：23.x / 24.x / 25.x
 - 不支持：26.x+
@@ -12,40 +12,46 @@
 ## Runtime
 
 - 文件数：85
-- 大小：743,575 bytes
-- SHA-256：`a11df3ff65e6be204c4664d17d9fa6cfec6506c418110d344ead87db50053f78`
-- Source / staging：一致
-- 与上一内部基线不同的原因：只调整 `v1.0.0` 版本、产品显示名称与 CEP 启动诊断版本；未修改业务逻辑。
+- 大小：749,716 bytes
+- SHA-256：`50c74fb15198ed7a8f22ab84277313113979ea32c485b7465560c7ec329aa672`
+- Source / dev staging / Setup payload / Release ZIP Runtime：完全一致
+- v1.0.2 业务变化仅包含已经完成人工验证的 Prompt Preset 删除持久化修复。
 
 ## 安装器与发布包
 
-- 公开安装入口：`PSAIHub-Setup.cmd`
-- Debug 入口：`Debug\PSAIHub-Debug.cmd`
+- ZIP 内公开安装入口：`PSAIHub-Setup.cmd`
+- ZIP 内 Debug 入口：`Debug\PSAIHub-Debug.cmd`
 - 手动安装兜底：`Manual\PS-AI-Image-Hub-CEP11-Compat`
-- 公开 ZIP 中未包含未签名 EXE
-- 本地 IExpress Setup 构建产物：413,696 bytes；SHA-256 `07e7b116fd5b470516ad60238ef6debd6175ba22d24a7dd689f13cb86aa3701d`
-- 本地 IExpress Debug 构建产物：413,696 bytes；SHA-256 `983e8028bd01e89acb53f7310bbbc42d73474da5b0f43ffe28c4c01a6de5325c`
-- `PSAIHub-Compat.zip`：463,029 bytes；105 entries；解压后 1,023,357 bytes
-- ZIP SHA-256：`87776552b8f0c0c05bed7bd1a507f0732da78959da279a0d57f0f61c60d4471a`
+- 公开 ZIP 中未包含未签名 EXE；GitHub Release 同时提供独立 EXE 附件。
+- `PSAIHub-Setup.exe`：413,696 bytes；SHA-256 `ea35983f33f33b86a58f85081b803a0503f79a9e4feafe86e7f19b4655bd7d0f`
+- `PSAIHub-Debug.exe`：413,696 bytes；SHA-256 `d0c281e063f6821b5e0dbd553ce6e759b0e0fabd59c8728f31b69a90271ce86f`
+- `PSAIHub-Compat.zip`：464,148 bytes；101 files；解压后 1,031,718 bytes
+- ZIP SHA-256：`150c807d524088abeab9e195cfd8da348c311ca68ce41525805a0da2b37d4ff8`
 
 ## 验证
 
-- Targeted / parity：40 passed
-- Full regression：637 passed / 0 failed / 1 skipped
-- Installer targeted tests：38 passed
+- Prompt Preset UI / 删除持久化 targeted：8 passed
+- Formal / Compat parity 与兼容 targeted：41 passed
+- Full regression：645 passed / 0 failed / 1 skipped
+- Installer tests：68 passed
 - PowerShell install/repair/update/rollback/uninstall integration：PASS
-- Distribution tests：30 passed（包含从解压后 ZIP 经 `PSAIHub-Setup.cmd` 到安装器主体的真实启动链）
+- Distribution tests：30 passed
+- Release ZIP 实际解压与 Prompt Preset UI 检查：PASS
+- Release ZIP 删除持久化模拟重启检查：PASS
 - CEP integrity：PASS
 - Static compatibility：PASS
 - PS23 / PS24 / PS25 fixtures：PASS
 - Bridge allowlist / client / Host method diff：PASS
-- Formal baseline：468 files、5,003,103 bytes，SHA-256 `ae06e989134bd56cc51f0f4678e030d34ccbd8a5279b977d067830b065dd68c9`，未变化
-- 公开源码候选（205 files）与 GitHub Release：0 真实密钥、0 私人路径、0 用户数据/图片/日志
+- Setup payload / Release ZIP / dev Runtime hash：一致
+- Formal baseline：469 files、5,020,952 bytes，SHA-256 `f238bc372fe326cf79e76cad47b4308b097c30d3235e4788a0a4fa48806f18fd`，构建期间未变化
+- 公开源码候选与 GitHub Release：0 真实密钥、0 私人路径、0 用户数据/图片/日志
 
 ## 发布文件
 
 `github-release/` 只包含：
 
+- `PSAIHub-Setup.exe`
+- `PSAIHub-Debug.exe`
 - `PSAIHub-Compat.zip`
 - `PSAIHub-Compat.sha256.txt`
 - `RELEASE_BODY.md`

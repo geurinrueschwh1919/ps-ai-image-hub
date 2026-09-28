@@ -47,6 +47,7 @@
       this.store = options && options.store || null;
       this.presets = [];
       this.searchIndex = {};
+      this.lastDeletePersistent = true;
       this.reload();
     }
     rebuildSearchIndex() {
@@ -130,14 +131,25 @@
       if (!preset) throw new PromptPresetError(CODES.NOT_FOUND, "Selected preset no longer exists.");
       if (preset.factory) {
         if (this.store && this.store.setFactoryHidden) this.store.setFactoryHidden(preset.id, true);
+        this.lastDeletePersistent = !(this.store && this.store.isPersistent) || this.store.isPersistent();
         return true;
       }
-      this.presets = this.presets.filter(function keep(item) { return item.id !== preset.id; });
-      this.persist();
+      if (this.store && typeof this.store.deletePreset === "function") {
+        var result = this.store.deletePreset(preset.id);
+        this.presets = result.state.presets.slice();
+        this.lastDeletePersistent = result.persistent !== false;
+        this.rebuildSearchIndex();
+        return true;
+      }
+      var nextPresets = this.presets.filter(function keep(item) { return item.id !== preset.id; });
+      if (this.store && typeof this.store.save === "function") this.store.save(nextPresets);
+      this.presets = nextPresets;
+      this.rebuildSearchIndex();
       if (this.store && this.store.removePresetData) this.store.removePresetData(preset.id);
       else if (this.store && this.store.getRecentId && this.store.getRecentId() === preset.id) this.store.setRecentId("");
       return true;
     }
+    wasLastDeletePersistent() { return this.lastDeletePersistent; }
     restoreFactory(id) {
       var preset = this.presets.find(function match(item) { return item.id === String(id || "") && item.factory; });
       if (!preset) throw new PromptPresetError(CODES.NOT_FOUND, "Factory preset is unavailable.");
