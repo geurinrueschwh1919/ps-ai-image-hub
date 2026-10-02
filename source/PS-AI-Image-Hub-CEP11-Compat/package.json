@@ -1,6 +1,6 @@
 {
   "name": "ps-ai-image-hub-cep11-compat",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "CEP11 multi-version runtime for Photoshop 2022-2024 (hosts 23.x-25.x).",
   "scripts": {

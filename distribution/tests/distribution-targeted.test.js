@@ -12,15 +12,10 @@ const distributionRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(distributionRoot, "..");
 const folderName = "PSAIHub-Compat";
 const zipName = folderName + ".zip";
-const releaseSourceName = "PS-AI-Image-Hub-Setup-v1.0.2.exe";
-const debugSourceName = "PS-AI-Image-Hub-Setup-v1.0.2-Debug.exe";
 const releaseName = "PSAIHub-Setup.cmd";
 const debugName = "PSAIHub-Debug.cmd";
 const zipPath = path.join(distributionRoot, "dist", zipName);
 const zipHashPath = zipPath + ".sha256.txt";
-const installerDist = path.join(projectRoot, "installer", "dist");
-const installerReleasePath = path.join(installerDist, releaseSourceName);
-const installerDebugPath = path.join(installerDist, debugSourceName);
 const installerPackageSource = path.join(projectRoot, "installer", "build", "package");
 const runtimeSource = path.join(projectRoot, "outputs", "dev", "PS-AI-Image-Hub-CEP11-Compat");
 const roundtripRoot = fs.mkdtempSync(path.join(os.tmpdir(), "psai-distribution-"));
@@ -59,7 +54,11 @@ function checksumFor(name) {
 
 test.after(() => fs.rmSync(roundtripRoot, { recursive: true, force: true }));
 
-test("1 local unsigned IExpress artifacts exist for future signing", () => { assert.ok(fs.statSync(installerReleasePath).size > 0); assert.ok(fs.statSync(installerDebugPath).size > 0); });
+test("1 CMD package and launchers are current", () => {
+  assert.ok(fs.statSync(path.join(installerPackageSource,"payload.zip")).size > 0);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(installerPackageSource,"metadata.json"),"utf8").replace(/^\uFEFF/,"")).bundleVersion,"1.0.3");
+  assert.ok(fs.statSync(path.join(projectRoot,"installer","src","launch-portable.cmd")).size > 0);
+});
 test("2 public release uses transparent CMD launcher", () => {
   assert.equal(sha256(releasePath), sha256(path.join(projectRoot, "installer", "src", "launch-portable.cmd")));
   const launcher=fs.readFileSync(releasePath, "utf8");
@@ -153,9 +152,9 @@ test("28 manual runtime fallback exactly matches verified staging", () => {
   assert.deepEqual(names(manualRuntimePath),names(runtimeSource));
   assert.ok(fs.existsSync(path.join(manualRuntimePath,"CSXS","manifest.xml")));
 });
-test("29 unsigned IExpress hashes are documented but binaries are not distributed", () => {
-  assert.equal(checksumFor(releaseSourceName),sha256(installerReleasePath));
-  assert.equal(checksumFor(debugSourceName),sha256(installerDebugPath));
+test("29 packaged payload hash and Runtime tree hash are documented", () => {
+  assert.equal(checksumFor("Installer\\payload.zip"),sha256(path.join(installerPackageSource,"payload.zip")));
+  assert.match(checksum,/Runtime tree SHA-256:\s+[a-f0-9]{64}/i);
 });
 test("30 public Setup CMD reaches the packaged installer from the extracted ZIP", () => {
   const result=spawnSync("cmd.exe",["/D","/C",releasePath],{

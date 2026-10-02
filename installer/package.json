@@ -1,6 +1,6 @@
 {
   "name": "ps-ai-image-hub-cep11-compat-installer",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Build-time tooling and tests for the PS AI Image Hub Windows installer. The produced installer contains no Node runtime.",
   "scripts": {

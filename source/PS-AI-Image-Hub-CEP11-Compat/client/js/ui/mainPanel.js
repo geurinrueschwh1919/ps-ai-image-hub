@@ -122,7 +122,7 @@
     mount() {
       this.root.innerHTML = `
         <section class="panel-shell">
-          <header class="app-header"><h1>${this.t("appTitle")}</h1><span class="phase-badge">v1.0.2</span></header>
+          <header class="app-header"><h1>${this.t("appTitle")}</h1><span class="phase-badge">v1.0.3</span></header>
           ${this.storagePersistent ? "" : '<p class="compat-warning">' + this.t("compatSessionStorageWarning") + "</p>"}
           <nav class="tab-bar" role="tablist"><button class="tab-button" data-tab="generate" role="tab" aria-selected="true" type="button">${this.t("generateTab")}</button><button class="tab-button" data-tab="settings" role="tab" aria-selected="false" type="button">${this.t("settings")}</button><button class="tab-button" data-tab="history" role="tab" aria-selected="false" type="button">${this.t("history")}</button></nav>
           <section id="tab-generate" class="tab-panel" data-tab-panel="generate" role="tabpanel">

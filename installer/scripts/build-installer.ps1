@@ -10,9 +10,9 @@ $runtimeCopy = Join-Path $buildRoot 'runtime'
 $packageRoot = Join-Path $buildRoot 'package'
 $distRoot = Join-Path $installerRoot 'dist'
 $reportRoot = Join-Path $installerRoot 'reports'
-$outputName = 'PS-AI-Image-Hub-Setup-v1.0.2.exe'
+$outputName = 'PS-AI-Image-Hub-Setup-v1.0.3.exe'
 $outputPath = Join-Path $distRoot $outputName
-$debugOutputName = 'PS-AI-Image-Hub-Setup-v1.0.2-Debug.exe'
+$debugOutputName = 'PS-AI-Image-Hub-Setup-v1.0.3-Debug.exe'
 $debugOutputPath = Join-Path $distRoot $debugOutputName
 $expectedFormalHash = 'f238bc372fe326cf79e76cad47b4308b097c30d3235e4788a0a4fa48806f18fd'
 
@@ -73,7 +73,7 @@ $metadata = [ordered]@{
   extensionId = Match-One '<Extension\s+Id="([^"]+)"'
   extensionVersion = Match-One '<Extension\s+Id="[^"]+"\s+Version="([^"]+)"'
   hostRange = Match-One '<Host\s+Name="PHSP"\s+Version="([^"]+)"'
-  versionLabel = 'v1.0.2'
+  versionLabel = 'v1.0.3'
 }
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'metadata.json') -Encoding UTF8
 
@@ -84,6 +84,51 @@ foreach ($name in @('install.ps1','uninstall.ps1','registryDetector.psm1','files
 Copy-Item -LiteralPath $payloadZip,(Join-Path $buildRoot 'runtime-hashes.json'),(Join-Path $buildRoot 'metadata.json') -Destination $packageRoot -Force
 
 $packageFiles = @(Get-ChildItem -LiteralPath $packageRoot -File | Sort-Object Name)
+$formalAfter = Get-TreeStats $formalRoot
+$stagingAfter = Get-TreeStats $stagingRoot
+if ($formalAfter.aggregateSha256 -ne $formalBefore.aggregateSha256) { throw 'Formal project changed during installer build.' }
+if ($stagingAfter.aggregateSha256 -ne $stagingBefore.aggregateSha256) { throw 'Compat staging changed during installer build.' }
+$runtimeFileCount = $runtimeFiles.Count
+$runtimeSize = ($runtimeFiles | Measure-Object -Property Length -Sum).Sum
+$payloadInfo = Get-Item -LiteralPath $payloadZip
+$payloadHash = Get-Sha256 $payloadZip
+$compatVersion = $metadata['bundleVersion']
+$displayName = $metadata['displayName']
+$bundleId = $metadata['bundleId']
+$extensionId = $metadata['extensionId']
+$hostRange = $metadata['hostRange']
+foreach ($staleSed in @((Join-Path $buildRoot 'installer.sed'), (Join-Path $buildRoot 'installer-debug.sed'))) {
+  if (Test-Path -LiteralPath $staleSed) { Remove-Item -LiteralPath $staleSed -Force }
+}
+$report = @"
+# Installer Package Build Report
+
+- Build date: $(Get-Date -Format o)
+- Public installer technology: CMD launcher + Windows PowerShell transactional installer
+- Installer version: v1.0.3 / $compatVersion
+- Compat source path: $stagingRoot
+- Display name: $displayName
+- Bundle ID: $bundleId
+- Extension ID: $extensionId
+- Host range: $hostRange
+- Runtime file count: $runtimeFileCount
+- Runtime size: $runtimeSize bytes
+- Runtime tree hash: $($stagingBefore.aggregateSha256)
+- Payload size: $($payloadInfo.Length) bytes
+- Payload SHA-256: $payloadHash
+- Package files: $($packageFiles.Name -join ', ')
+- IExpress invoked: no
+- Formal project hash before/after: $($formalBefore.aggregateSha256) / $($formalAfter.aggregateSha256)
+- Compat staging hash before/after: $($stagingBefore.aggregateSha256) / $($stagingAfter.aggregateSha256)
+- Result: **PASS**
+
+The public distribution uses ``PSAIHub-Setup.cmd`` and ``Debug\PSAIHub-Debug.cmd``. No EXE is produced by this build.
+"@
+$report | Set-Content -LiteralPath (Join-Path $reportRoot 'INSTALLER_BUILD_REPORT.md') -Encoding UTF8
+Write-Output "CMD installer package built: $packageRoot"
+Write-Output "Payload: $payloadZip"
+Write-Output "Payload SHA256: $payloadHash"
+return
 $strings = @(); $entries = @()
 for ($i=0; $i -lt $packageFiles.Count; $i++) { $strings += "FILE$i=$($packageFiles[$i].Name)"; $entries += "%FILE$i%=" }
 
@@ -157,7 +202,7 @@ $report = @"
 
 - Build date: $(Get-Date -Format o)
 - Installer technology: Windows IExpress + Windows PowerShell transactional installer (Inno Setup/NSIS unavailable locally)
-- Installer version: v1.0.2 / $compatVersion
+- Installer version: v1.0.3 / $compatVersion
 - Compat source path: $stagingRoot
 - Compat version: $compatVersion
 - Display name: $displayName

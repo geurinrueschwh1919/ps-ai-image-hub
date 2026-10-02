@@ -45,7 +45,7 @@ if (sourceFileCount !== stagingStats.fileCount || sourceTotalSize !== stagingSta
   throw new Error("Source/staging count, size, or SHA-256 mismatch.");
 }
 
-const report = { build: "1.0.2", builtAt: new Date().toISOString(), sourceRoot, stagingRoot,
+const report = { build: "1.0.3", builtAt: new Date().toISOString(), sourceRoot, stagingRoot,
   sourceFileCount, sourceTotalSize, sourceSha256, stagingFileCount: stagingStats.fileCount, stagingTotalSize: stagingStats.totalSize,
   stagingSha256: stagingStats.aggregateSha256, forbiddenEntries: forbidden };
 fs.writeFileSync(path.join(projectRoot, "reports", "DEV_BUILD_REPORT.json"), JSON.stringify(report, null, 2) + "\n", "utf8");

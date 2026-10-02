@@ -4,21 +4,16 @@ param()
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
-$distributionVersion = "v1.0.2"
-$productVersion = "1.0.2"
+$distributionVersion = "v1.0.3"
+$productVersion = "1.0.3"
 $packageFolderName = "PSAIHub-Compat"
 $zipFileName = $packageFolderName + ".zip"
-$releaseSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.2.exe"
-$debugSourceFileName = "PS-AI-Image-Hub-Setup-v1.0.2-Debug.exe"
 $releaseFileName = "PSAIHub-Setup.cmd"
 $debugFileName = "PSAIHub-Debug.cmd"
 
 $distributionRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $distributionRoot))
 $formalRoot = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $projectRoot) "adobe-photoshop-uxp-ps-ai-image"))
-$installerDist = Join-Path $projectRoot "installer\dist"
-$releaseSource = Join-Path $installerDist $releaseSourceFileName
-$debugSource = Join-Path $installerDist $debugSourceFileName
 $runtimeRoot = Join-Path $projectRoot "outputs\dev\PS-AI-Image-Hub-CEP11-Compat"
 $installerPackageRoot = Join-Path $projectRoot "installer\build\package"
 $portableReleaseSource = Join-Path $projectRoot "installer\src\launch-portable.cmd"
@@ -145,19 +140,10 @@ $formalBefore = Get-TreeAggregate -Root $formalRoot
 
 $runtimeBefore = Get-TreeAggregate -Root $runtimeRoot
 
-foreach ($requiredExe in @($releaseSource, $debugSource)) {
-  if (-not (Test-Path -LiteralPath $requiredExe -PathType Leaf)) { throw "Required installer is missing: $requiredExe" }
-  if ((Get-Item -LiteralPath $requiredExe).Length -le 0) { throw "Required installer is empty: $requiredExe" }
-}
 foreach ($requiredPortableFile in @($portableReleaseSource, $portableDebugSource)) {
   if (-not (Test-Path -LiteralPath $requiredPortableFile -PathType Leaf)) { throw "Portable installer launcher is missing: $requiredPortableFile" }
 }
 if (-not (Test-Path -LiteralPath $installerPackageRoot -PathType Container)) { throw "Installer support package is missing: $installerPackageRoot" }
-
-$releaseInfo = Get-Item -LiteralPath $releaseSource
-$debugInfo = Get-Item -LiteralPath $debugSource
-$releaseHash = Get-Sha256 -Path $releaseSource
-$debugHash = Get-Sha256 -Path $debugSource
 
 $expectedBuildRoot = [IO.Path]::GetFullPath((Join-Path $distributionRoot "build"))
 if ($buildRoot -ne $expectedBuildRoot -or (Split-Path -Leaf $buildRoot) -ne "build") { throw "Unsafe distribution build path: $buildRoot" }
@@ -178,15 +164,15 @@ $feedback = Expand-Template -TemplatePath (Join-Path $templatesRoot "问题反�
 Write-Utf8Text -Path (Join-Path $stagingRoot "README-安装说明.txt") -Content $readme
 Write-Utf8Text -Path (Join-Path $stagingRoot "问题反馈模板.txt") -Content $feedback
 
+$payloadPath = Join-Path $installerPackageRoot "payload.zip"
+$payloadHash = Get-Sha256 -Path $payloadPath
 $checksumText = @"
-Unsigned IExpress build artifact (not included in the public ZIP):
-$releaseSourceFileName
+Installer\payload.zip
 SHA-256:
-$releaseHash
+$payloadHash
 
-$debugSourceFileName
-SHA-256:
-$debugHash
+Runtime tree SHA-256:
+$($runtimeBefore.SHA256)
 "@
 Write-Utf8Text -Path (Join-Path $stagingRoot "SHA256.txt") -Content $checksumText.TrimStart()
 
@@ -237,8 +223,7 @@ function Write-BuildReport {
     "- Public launcher: ``$releaseFileName`` (plain CMD; no unsigned EXE in public ZIP)",
     "- Public debug launcher: ``Debug/$debugFileName``",
     "- Manual fallback runtime: ``Manual/PS-AI-Image-Hub-CEP11-Compat``",
-    "- Unsigned IExpress setup retained only as build artifact: ``$releaseSourceFileName`` / ``$releaseHash``",
-    "- Unsigned IExpress debug retained only as build artifact: ``$debugSourceFileName`` / ``$debugHash``",
+    "- Installer payload SHA256: ``$payloadHash``",
     "- Runtime file count: ``$($runtimeAfter.FileCount)``",
     "- Runtime total size: ``$($runtimeAfter.TotalSize) bytes``",
     "- Runtime SHA256: ``$($runtimeAfter.SHA256)``",
@@ -255,7 +240,7 @@ function Write-BuildReport {
     "- Enabled sizing shrinks oversized images through Canvas only when needed.",
     "- Smaller-than-target images keep the original PNG and use Photoshop Smart Object placement; browser Canvas never upscales them.",
     "- Equal-size images keep the original PNG and avoid unnecessary re-encoding.",
-    "", "The public ZIP intentionally uses transparent CMD/PowerShell launchers plus a manual-copy fallback. Unsigned IExpress EXEs remain local build artifacts for future trusted signing and are not distributed.", ""
+    "", "The public ZIP uses the v1.0.2-compatible CMD/PowerShell launchers plus a manual-copy fallback. IExpress is not part of this release build.", ""
   )
   Write-Utf8Text -Path $reportPath -Content ($lines -join "`r`n")
 }

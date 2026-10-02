@@ -1,11 +1,40 @@
 # 更新日志
 
-## 1.0.3 候选 — 2026-10-02
+## 1.0.3 — 2026-10-02
 
-- 正式支持生成结果以 PNG 或 JPEG 原始格式安全下载、保存和导入 Photoshop。
-- 修复 ExtendScript JPEG 文件尾部定位方向错误导致有效 JPEG 被误报为空或截断的问题。
-- 增加写入后字节长度复核，并继续拒绝格式伪装、HTML、损坏文件及未支持格式。
-- Photoshop 2024 人工验收：PNG 导入 **PASS**；GRS `nano-banana-fast` JPEG 生成 **PASS**；JPEG Photoshop 导入 **PASS**；Fast 模型 **PASS**；PNG 回归 **PASS**。
+### Fixed
+
+- 支持经过安全校验的 JPEG 生成结果以原始格式直接导入 Photoshop。
+- 修复 GRS `nano-banana-fast` 生成成功但无法导入的问题。
+- 修复 ExtendScript `File.seek()` 使用 mode 2 时方向错误，导致有效 JPEG 被误报为空或截断的问题。
+- PNG 与 JPEG 均使用真实 Magic Bytes 校验，不再只依赖 URL 或扩展名。
+- 支持 JPEG History 原图保存与重新导入，重新导入始终使用原始文件。
+- 修复失败 History 可通过有效 `resultUrl` 重新下载并导入原结果。
+- 修复错误的“当前 Mock 导入仅支持 PNG 图片”文案。
+- 修复 Provider URL 结果被错误固定声明为 `image/png` 的问题。
+
+### Security / Integrity
+
+- `Content-Type` 与 Magic Bytes 不一致时拒绝导入。
+- 文件扩展名与真实格式不一致时拒绝导入。
+- 继续拒绝 HTML、WebP、损坏文件和格式伪装文件。
+- 图片写入后回读并核对字节长度；写入不完整时不会调用 Photoshop Host。
+- JPEG 保持原始二进制，不经过 Canvas 重编码。
+
+### Compatibility
+
+- PNG 原有下载、保存和导入行为保持不变。
+- 正式 Extension ID、storage namespace 和用户数据目录保持不变。
+- v1.0.2 的设置、API Key、Provider、Prompt Preset 和 History 应继续保留。
+- Auto Sharpen 实验功能不包含在 v1.0.3 中。
+- WebP 和 AVIF 当前仍不支持。
+- Photoshop 23/24 仅完成静态与模拟兼容验证，尚未完成对应版本实机验证。
+
+### Manual Validation
+
+- Photoshop 2024：PNG 导入 **PASS**。
+- GRS `nano-banana-fast` JPEG 生成与 Photoshop 导入 **PASS**。
+- Fast 模型 **PASS**，PNG 回归 **PASS**。
 - 实机中的 `UNSUPPORTED_IMAGE_FILE` 与 `INVALID_IMAGE_FILE` 错误均已消失。
 - 验收状态：`V1.0.3-JPEG-MANUAL-TEST-PASSED`。
 

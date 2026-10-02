@@ -1,4 +1,4 @@
-# PS AI Image Hub v1.0.2
+# PS AI Image Hub v1.0.3
 
 > **仅支持 CEP 11 / Photoshop Host 23.x、24.x、25.x。Photoshop 26.x 及更高版本不受支持，请勿安装。**
 
@@ -23,12 +23,25 @@
 
 > Windows 仍可能提示来自互联网的 ZIP、CMD 或 PowerShell 文件存在风险。请只从本 Release 下载并核对 SHA-256；不要关闭 Defender，也不要安装来源不明或自签名根证书。
 
+## v1.0.3 更新
+
+- 支持经过安全校验的 PNG/JPEG 生成结果以原始格式导入 Photoshop。
+- 修复 GRS `nano-banana-fast` 生成成功但 JPEG 无法导入的问题。
+- 修复 ExtendScript JPEG 文件尾部定位方向错误、错误格式声明和误导性的 Mock/PNG 错误文案。
+- JPEG History 保存与重新导入继续使用原始图片；失败 History 可通过有效结果地址重新下载导入。
+- 写入后回读并核对字节长度，拒绝 Content-Type、扩展名与真实 Magic Bytes 不一致的文件。
+- JPEG 不经过 Canvas 重编码；PNG 原有导入行为保持不变。
+- 正式 Extension ID、storage namespace、用户数据目录及 v1.0.2 用户设置保持不变。
+
+人工验收：`V1.0.3-JPEG-MANUAL-TEST-PASSED`。
+
+> Auto Sharpen 实验功能不包含在 v1.0.3 中。WebP 与 AVIF 当前仍不支持。Photoshop 23/24 仅完成静态与模拟兼容验证，尚未完成对应版本实机验证。
+
 ## v1.0.2 更新
 
 - 修复用户 Prompt Preset 删除后重启 Photoshop 又恢复的问题。
 - 删除时同步清理 Favorites、Recent、Preset Stack、重命名与参数值关联状态。
 - 保留完整 Prompt Preset UI、JSON/ZIP 导入、分类、收藏、搜索和组合功能。
-- 延续 v1.0.1 的透明 CMD 安装入口、Debug 诊断入口和手动安装兜底。
 
 ## v1.0.1 安装器修复
 

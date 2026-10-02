@@ -3,8 +3,8 @@
 ## 基线
 
 - Formal 业务基线：`adobe-photoshop-uxp-ps-ai-image`，版本 `0.1.0 Stable`。
-- 当前公开 Release 基线：多版本 CEP 11，版本 `1.0.2`。
-- 同步日期：`2026-09-28`。
+- 当前发布候选基线：多版本 CEP 11，版本 `1.0.3`。
+- 同步日期：`2026-10-02`。
 - 当前状态：`0 FORMAL_ONLY`、`0 NEED_SYNC`。
 - 规则：Formal 出现新的业务功能时，本文件必须先标记 `SYNC REQUIRED`；完成 Compat 移植与全部验证后，才可改为 `SAME` 或 `DIFFERENT_IMPLEMENTATION`。
 
