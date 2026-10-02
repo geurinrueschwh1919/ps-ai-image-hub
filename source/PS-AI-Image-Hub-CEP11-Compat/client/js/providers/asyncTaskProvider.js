@@ -392,7 +392,7 @@
       var normalized = parsed && parsed.result ? parsed.result : definitions.extractAsyncResult(this.definition, parsed && parsed.raw || parsed);
       var mimeType = this.definition.result.mimeType || "image/png";
       var images = normalized.urls.map(function url(value, index) {
-        return { id: "async-url-" + index, mimeType: mimeType, previewSource: value,
+        return { id: "async-url-" + index, mimeType: null, previewSource: value,
           importSource: { type: "url", url: value }, rawResponseMeta: { definitionId: this.definition.id, resultPath: this.definition.result.path } };
       }, this);
       return images.concat(normalized.base64.map(function base64(value, index) {

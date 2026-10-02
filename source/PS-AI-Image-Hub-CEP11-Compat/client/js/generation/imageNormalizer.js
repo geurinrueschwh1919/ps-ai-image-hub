@@ -43,7 +43,7 @@
       var importSource = normalizeImportSource(image);
       return {
         id: image.id || "generated-" + Date.now(),
-        mimeType: String(image.mimeType || "image/png").toLowerCase(),
+        mimeType: image.mimeType ? String(image.mimeType).toLowerCase() : (importSource.type === "url" ? null : "image/png"),
         sourceType: image.sourceType || importSource.type,
         previewSource: previewSource,
         previewUrl: previewSource,

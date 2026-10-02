@@ -108,7 +108,7 @@
       if (!source) return null;
       if (source.type === "url") {
         var downloaded = await this.apiClient.requestArrayBuffer(source.url, { timeoutContext: "download" });
-        return { base64: base64.bytesToBase64(downloaded.bytes), bytes: new Uint8Array(downloaded.bytes) };
+        return { base64: base64.bytesToBase64(downloaded.bytes), bytes: new Uint8Array(downloaded.bytes), mimeType: downloaded.mimeType || null };
       }
       if (source.type === "base64" || source.type === "data-url") return base64.base64ToBytes(source.data || source.dataUrl || "");
       var localPath = source.type === "plugin-asset" ? this.photoshopBridge.resolveExtensionAsset(source.relativePath) : source.type === "local-file" ? source.path : null;
@@ -119,12 +119,16 @@
     }
     async persistImage(entryId, image) {
       var payload = await this.imageBase64(image);
-      if (!payload || base64.detectImageMimeType(payload.bytes) !== "image/png") return null;
+      var detected = payload && base64.detectImageMimeType(payload.bytes);
+      var declared = payload && base64.canonicalImageMimeType(payload.mimeType);
+      if (!payload || ["image/png", "image/jpeg"].indexOf(detected) === -1) return null;
+      if (declared && declared !== "application/octet-stream" && declared !== detected) return null;
+      if (!base64.hasCompleteImageSignature(payload.bytes, detected)) return null;
       var paths = this.ensureDirectories();
-      var filePath = paths.images + paths.slash + entryId + ".png";
+      var filePath = paths.images + paths.slash + entryId + (detected === "image/jpeg" ? ".jpg" : ".png");
       var result = this.cepFs.writeFile(filePath, payload.base64, this.base64Encoding);
       if (!result || result.err !== 0) return null;
-      return filePath;
+      return { path: filePath, mimeType: detected };
     }
     baseEntry(input, result, status, identity) {
       var now = new Date();
@@ -155,7 +159,7 @@
         enableThinking: input && input.enableThinking !== undefined ? input.enableThinking !== false : null,
         seed: safeText(input && input.seed, 40),
         taskId: safeText(result && result.taskId || owner.taskId, 240), status: status, generationStatus: status,
-        importStatus: result && result.importState || "notImported", resultUrl: "", localResultFile: null, thumbnail: null,
+        importStatus: result && result.importState || "notImported", resultUrl: "", localResultFile: null, localResultMimeType: null, thumbnail: null,
         importedToPhotoshop: Boolean(result && result.importState === "imported"),
         importContext: sanitizeImportContext(result && result.importResult && result.importResult.importContext),
         errorCode: null, errorMessage: null
@@ -223,7 +227,8 @@
       }
       var first = result && result.images && result.images[0];
       entry.resultUrl = first && first.importSource && first.importSource.type === "url" ? safeText(first.importSource.url, 2000) : "";
-      if (first) entry.localResultFile = await this.persistImage(entry.id, first);
+      var persisted = first ? await this.persistImage(entry.id, first) : null;
+      if (persisted) { entry.localResultFile = persisted.path; entry.localResultMimeType = persisted.mimeType; }
       entry.thumbnail = entry.localResultFile;
       if (identity && identity.executionId && identity.historyId) {
         return this.writeExecutionStatus(identity, {
@@ -236,7 +241,7 @@
           outputSize: entry.outputSize, presetIds: entry.presetIds, presetTitles: entry.presetTitles, quality: entry.quality,
           negativePrompt: entry.negativePrompt, promptExtend: entry.promptExtend,
           promptExtendMode: entry.promptExtendMode, enableThinking: entry.enableThinking, seed: entry.seed,
-          taskId: entry.taskId, resultUrl: entry.resultUrl, localResultFile: entry.localResultFile,
+          taskId: entry.taskId, resultUrl: entry.resultUrl, localResultFile: entry.localResultFile, localResultMimeType: entry.localResultMimeType,
           thumbnail: entry.thumbnail, importedToPhotoshop: entry.importedToPhotoshop,
           importContext: entry.importContext,
           errorCode: null, errorMessage: null

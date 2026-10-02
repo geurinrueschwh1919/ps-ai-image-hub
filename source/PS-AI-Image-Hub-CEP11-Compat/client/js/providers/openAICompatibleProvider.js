@@ -36,7 +36,7 @@
       if (!response || !Array.isArray(response.data)) throw new errors.AppError(errors.ErrorCodes.INVALID_RESPONSE_FORMAT, "OpenAI-compatible response does not contain a data array.");
       var images = response.data.map(function map(item, index) {
         if (item && item.b64_json) return { id: "api-" + index, mimeType: "image/png", previewSource: "data:image/png;base64," + item.b64_json, importSource: { type: "base64", data: item.b64_json, mimeType: "image/png" }, rawResponseMeta: { created: response.created || null } };
-        if (item && item.url) return { id: "api-" + index, mimeType: "image/png", previewSource: item.url, importSource: { type: "url", url: item.url }, rawResponseMeta: { created: response.created || null } };
+        if (item && item.url) return { id: "api-" + index, mimeType: null, previewSource: item.url, importSource: { type: "url", url: item.url }, rawResponseMeta: { created: response.created || null } };
         return null;
       }).filter(Boolean);
       if (!images.length) throw new errors.AppError(errors.ErrorCodes.INVALID_RESPONSE_FORMAT, "OpenAI-compatible response contains no image URL or Base64 payload.");

@@ -54,7 +54,7 @@
       var detailText = document.createElement("pre"); detailText.textContent = [this.t("apiService") + ": " + (entry.providerDisplayName || entry.provider), "Model ID: " + entry.modelId, "Task ID: " + (entry.taskId || "-"), entry.region ? this.t("region") + ": " + entry.region : "", entry.workspaceId ? "Workspace ID: " + entry.workspaceId : "", this.t("prompt") + ": " + finalPrompt,
         this.t("aspectRatio") + ": " + (entry.aspectRatio || "-"), this.t("outputResolution") + ": " + (entry.imageSize || "-"), "Error: " + (entry.errorCode || "-") + " " + (entry.errorMessage || "")].filter(Boolean).join("\n"); details.appendChild(detailText);
       var actions = document.createElement("div"); actions.className = "history-actions";
-      actions.appendChild(this.action(this.t("reimport"), () => this.onReimport(entry), !entry.localResultFile));
+      actions.appendChild(this.action(this.t("reimport"), () => this.onReimport(entry), !entry.localResultFile && !entry.resultUrl));
       actions.appendChild(this.action(this.t("restoreParameters"), () => this.onRestore(entry)));
       actions.appendChild(this.action(this.t("copyPrompt"), () => root.PSAIImageHubCompat.copyText(finalPrompt)));
       actions.appendChild(this.action(this.t("copyTaskId"), () => root.PSAIImageHubCompat.copyText(entry.taskId), !entry.taskId));

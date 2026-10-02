@@ -125,7 +125,8 @@ test("URL download writes a transient PNG through CEP fs without Node.js", async
   const store = new ImageFileStore({
     photoshopBridge: { getUserDataRoot() { return "D:\\Fixture\\UserData"; } },
     apiClient: { async requestArrayBuffer() { return { bytes: pngBytes.buffer.slice(pngBytes.byteOffset, pngBytes.byteOffset + pngBytes.byteLength), mimeType: "image/png" }; } },
-    cepFs: { makedir() { return { err: 0 }; }, writeFile(file, data, encoding) { writes.push({ file, data, encoding }); return { err: 0 }; }, deleteFile() { return { err: 0 }; } },
+    cepFs: { makedir() { return { err: 0 }; }, writeFile(file, data, encoding) { writes.push({ file, data, encoding }); return { err: 0 }; },
+      readFile() { return { err: 0, data: writes[0].data }; }, deleteFile() { return { err: 0 }; } },
     base64Encoding: "base64"
   });
   const file = await store.materialize({ type: "url", url: "https://images.example/result.png" });

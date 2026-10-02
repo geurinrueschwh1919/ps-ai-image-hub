@@ -42,7 +42,7 @@
       if (type !== "url" && type !== "base64") throw new errors.AppError(errors.ErrorCodes.UNSUPPORTED_RESULT_FORMAT, "Generic REST result type is unsupported.");
       return values.map(function map(item, index) {
         if (typeof item !== "string") throw new errors.AppError(errors.ErrorCodes.INVALID_RESPONSE_FORMAT, "Image result must be a string.");
-        if (type === "url") return { id: "generic-" + index, mimeType: "image/png", previewSource: item, importSource: { type: "url", url: item }, rawResponseMeta: { responsePath: this.config.responsePath } };
+        if (type === "url") return { id: "generic-" + index, mimeType: null, previewSource: item, importSource: { type: "url", url: item }, rawResponseMeta: { responsePath: this.config.responsePath } };
         var dataUrl = /^data:/i.test(item) ? item : "data:image/png;base64," + item;
         return { id: "generic-" + index, mimeType: "image/png", previewSource: dataUrl, importSource: { type: "base64", data: item, mimeType: "image/png" }, rawResponseMeta: { responsePath: this.config.responsePath } };
       }, this);

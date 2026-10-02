@@ -94,25 +94,76 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     return total;
   }
 
-  function assertPngFile(fileReference) {
+  function assertSupportedImageFile(fileReference) {
     var name = String(fileReference.name || "").toLowerCase();
     var opened = false;
     var previousEncoding = fileReference.encoding;
     var header;
-    var expected = [137, 80, 78, 71, 13, 10, 26, 10];
+    var tail;
+    var fileSize;
+    var scanOffset;
+    var chunkLength;
+    var expectedPosition;
+    var firstByteOfLaterChunk = -1;
+    var foundJpegEndMarker = false;
+    var isPngName = /\.png$/.test(name);
+    var isJpegName = /\.jpe?g$/.test(name);
+    var pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+    var detected = "";
     var index;
-    if (!/\.png$/.test(name)) {
-      raiseHostError("UNSUPPORTED_IMAGE_FILE", "Only PNG files are supported in the current Mock import phase.");
+    if (!isPngName && !isJpegName) {
+      raiseHostError("UNSUPPORTED_IMAGE_FILE", "Only PNG and JPEG generated image files are supported.");
     }
     try {
       fileReference.encoding = "BINARY";
       opened = fileReference.open("r");
       if (!opened) raiseHostError("IMAGE_FILE_NOT_FOUND", "The generated image file could not be opened.");
       header = fileReference.read(8);
-      if (!header || header.length !== 8) raiseHostError("INVALID_PNG", "The generated PNG file is empty or truncated.");
-      for (index = 0; index < expected.length; index += 1) {
-        if ((header.charCodeAt(index) & 255) !== expected[index]) {
-          raiseHostError("INVALID_PNG", "The generated image does not contain a valid PNG signature.");
+      if (header && header.length >= 8) {
+        detected = "png";
+        for (index = 0; index < pngSignature.length; index += 1) {
+          if ((header.charCodeAt(index) & 255) !== pngSignature[index]) { detected = ""; break; }
+        }
+      }
+      if (!detected && header && header.length >= 3
+          && (header.charCodeAt(0) & 255) === 255
+          && (header.charCodeAt(1) & 255) === 216
+          && (header.charCodeAt(2) & 255) === 255) detected = "jpeg";
+      if (isPngName && !detected) {
+        raiseHostError("INVALID_PNG", "The generated image does not contain a valid PNG signature.");
+      }
+      if (!detected || (isPngName && detected !== "png") || (isJpegName && detected !== "jpeg")) {
+        raiseHostError("INVALID_IMAGE_FILE", "The generated image extension does not match its PNG or JPEG signature.");
+      }
+      if (detected === "jpeg") {
+        fileReference.seek(0, 2);
+        fileSize = fileReference.tell();
+        if (!isFinite(fileSize) || fileSize < 4) {
+          raiseHostError("INVALID_IMAGE_FILE", "The generated JPEG file is empty or truncated.");
+        }
+        scanOffset = 0;
+        while (scanOffset < fileSize && !foundJpegEndMarker) {
+          chunkLength = Math.min(65536, fileSize - scanOffset);
+          expectedPosition = fileSize - scanOffset - chunkLength;
+          fileReference.seek(scanOffset + chunkLength, 2);
+          if (fileReference.tell() !== expectedPosition) break;
+          tail = fileReference.read(chunkLength);
+          if (!tail || tail.length !== chunkLength) break;
+          if ((tail.charCodeAt(tail.length - 1) & 255) === 255 && firstByteOfLaterChunk === 217) {
+            foundJpegEndMarker = true;
+            break;
+          }
+          for (index = tail.length - 2; index >= 0; index -= 1) {
+            if ((tail.charCodeAt(index) & 255) === 255 && (tail.charCodeAt(index + 1) & 255) === 217) {
+              foundJpegEndMarker = true;
+              break;
+            }
+          }
+          firstByteOfLaterChunk = tail.charCodeAt(0) & 255;
+          scanOffset += chunkLength;
+        }
+        if (!foundJpegEndMarker) {
+          raiseHostError("INVALID_IMAGE_FILE", "The generated JPEG file is incomplete or corrupt.");
         }
       }
     } finally {
@@ -272,7 +323,7 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
 
       fileReference = new File(String(filePath));
       if (!fileReference.exists) return failure("IMAGE_FILE_NOT_FOUND", "The generated image file does not exist.");
-      assertPngFile(fileReference);
+      assertSupportedImageFile(fileReference);
 
       targetDocument = app.activeDocument;
       layerName = nextGeneratedLayerName(targetDocument);
@@ -281,10 +332,10 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
       try {
         sourceDocument = app.open(fileReference);
       } catch (openError) {
-        raiseHostError("PHOTOSHOP_IMPORT", "Photoshop could not open the generated PNG file.");
+        raiseHostError("PHOTOSHOP_IMPORT", "Photoshop could not open the generated image file.");
       }
       if (!sourceDocument || !sourceDocument.layers || sourceDocument.layers.length === 0) {
-        raiseHostError("PHOTOSHOP_IMPORT", "The generated PNG document contains no image layer.");
+        raiseHostError("PHOTOSHOP_IMPORT", "The generated image document contains no image layer.");
       }
 
       sourceLayer = sourceDocument.activeLayer || sourceDocument.layers[0];
@@ -364,19 +415,19 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
       }
       fileReference = new File(String(filePath));
       if (!fileReference.exists) return failure("IMAGE_FILE_NOT_FOUND", "The generated image file does not exist.");
-      assertPngFile(fileReference);
+      assertSupportedImageFile(fileReference);
 
       targetDocument = app.activeDocument;
       layerName = nextGeneratedLayerName(targetDocument);
       layerCountBefore = countLayers(targetDocument.layers);
       try { sourceDocument = app.open(fileReference); }
-      catch (openError) { raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Photoshop could not open the generated PNG for Smart Object import."); }
+      catch (openError) { raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Photoshop could not open the generated image for Smart Object import."); }
       if (!sourceDocument || !sourceDocument.layers || sourceDocument.layers.length === 0) {
-        raiseHostError("SMART_OBJECT_IMPORT_FAILED", "The generated PNG contains no image layer.");
+        raiseHostError("SMART_OBJECT_IMPORT_FAILED", "The generated image contains no image layer.");
       }
       sourceWidth = pixels(sourceDocument.width);
       sourceHeight = pixels(sourceDocument.height);
-      if (!(sourceWidth > 0 && sourceHeight > 0)) raiseHostError("SMART_OBJECT_IMPORT_FAILED", "The generated PNG dimensions are invalid.");
+      if (!(sourceWidth > 0 && sourceHeight > 0)) raiseHostError("SMART_OBJECT_IMPORT_FAILED", "The generated image dimensions are invalid.");
       scale = Math.min(width / sourceWidth, height / sourceHeight);
       if (scale < 0.999999) raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Smart Object upscale path cannot be used for a shrink operation.");
 

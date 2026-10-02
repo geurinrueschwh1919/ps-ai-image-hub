@@ -59,11 +59,33 @@
     return null;
   }
 
+  function canonicalImageMimeType(value) {
+    var mimeType = String(value || "").split(";", 1)[0].trim().toLowerCase();
+    return mimeType === "image/jpg" ? "image/jpeg" : mimeType;
+  }
+
+  function hasCompleteImageSignature(value, mimeType) {
+    var bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+    var canonical = canonicalImageMimeType(mimeType || detectImageMimeType(bytes));
+    var index;
+    if (canonical === "image/png") return bytes.length >= 8 && detectImageMimeType(bytes) === "image/png";
+    if (canonical === "image/jpeg") {
+      if (bytes.length < 4 || detectImageMimeType(bytes) !== "image/jpeg") return false;
+      for (index = bytes.length - 2; index >= 2; index -= 1) {
+        if (bytes[index] === 0xFF && bytes[index + 1] === 0xD9) return true;
+      }
+      return false;
+    }
+    return false;
+  }
+
   return {
     normalizeBase64: normalizeBase64,
     base64ToBytes: base64ToBytes,
     bytesToBase64: bytesToBase64,
     base64DecodedByteLength: base64DecodedByteLength,
-    detectImageMimeType: detectImageMimeType
+    detectImageMimeType: detectImageMimeType,
+    canonicalImageMimeType: canonicalImageMimeType,
+    hasCompleteImageSignature: hasCompleteImageSignature
   };
 }));

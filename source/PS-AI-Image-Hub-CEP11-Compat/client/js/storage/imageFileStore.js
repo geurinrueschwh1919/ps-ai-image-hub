@@ -32,6 +32,27 @@
       throw new AppError(ErrorCodes.TEMP_FILE_WRITE_FAILED, "Could not create generated image directory.", { cepError: result && result.err });
     }
 
+    verifyWrittenFile(filePath, expectedByteLength) {
+      var result;
+      var actualByteLength = -1;
+      try {
+        result = this.cepFs && typeof this.cepFs.readFile === "function"
+          ? this.cepFs.readFile(filePath, this.base64Encoding)
+          : null;
+        if (result && result.err === 0 && typeof result.data === "string") {
+          actualByteLength = base64.base64DecodedByteLength(result.data);
+        }
+      } catch (error) { actualByteLength = -1; }
+      if (actualByteLength !== expectedByteLength) {
+        this.remove(filePath);
+        throw new AppError(ErrorCodes.TEMP_FILE_WRITE_FAILED, "The local image write is incomplete.", {
+          expectedByteLength: expectedByteLength,
+          actualByteLength: actualByteLength
+        });
+      }
+      return actualByteLength;
+    }
+
     async sourceToBase64(importSource, options) {
       if (importSource.type === "base64" || importSource.type === "data-url") {
         return base64.base64ToBytes(importSource.data || importSource.dataUrl || "");
@@ -59,24 +80,29 @@
       var payload = await this.sourceToBase64(importSource, options);
       var detected = base64.detectImageMimeType(payload.bytes);
       if (!detected) throw new AppError(ErrorCodes.UNSUPPORTED_RESULT_FORMAT, "Generated result is not a recognized image.");
-      var declared = String(payload.mimeType || "").toLowerCase();
+      var declared = base64.canonicalImageMimeType(payload.mimeType);
       if (declared && declared !== "application/octet-stream" && declared.indexOf("image/") !== 0) {
         throw new AppError(ErrorCodes.UNSUPPORTED_RESULT_FORMAT, "Downloaded content type is not an image.", { mimeType: declared });
       }
       if (declared.indexOf("image/") === 0 && declared !== detected) {
         throw new AppError(ErrorCodes.UNSUPPORTED_RESULT_FORMAT, "Downloaded image bytes do not match Content-Type.", { declared: declared, detected: detected });
       }
-      if (detected !== "image/png") {
-        throw new AppError(ErrorCodes.UNSUPPORTED_IMAGE_FILE, "The verified Photoshop 2024 import bridge currently accepts PNG only.", { mimeType: detected });
+      if (["image/png", "image/jpeg"].indexOf(detected) === -1) {
+        throw new AppError(ErrorCodes.UNSUPPORTED_IMAGE_FILE, "Photoshop import supports PNG and JPEG result files.", { mimeType: detected });
+      }
+      if (!base64.hasCompleteImageSignature(payload.bytes, detected)) {
+        throw new AppError(ErrorCodes.INVALID_IMAGE_FILE, "Generated image data is incomplete or corrupt.", { mimeType: detected });
       }
       var rootPath = this.photoshopBridge.getUserDataRoot();
       var slash = rootPath.indexOf("\\") !== -1 || /^[A-Za-z]:/.test(rootPath) ? "\\" : "/";
       var folder = rootPath + slash + "PSAIImageHubCompat";
       this.ensureDirectory(folder);
-      var filePath = folder + slash + "generated-" + Date.now() + "-" + Math.floor(Math.random() * 100000) + ".png";
+      var extension = detected === "image/jpeg" ? ".jpg" : ".png";
+      var filePath = folder + slash + "generated-" + Date.now() + "-" + Math.floor(Math.random() * 100000) + extension;
       var result = this.cepFs.writeFile(filePath, payload.base64, this.base64Encoding);
       if (!result || result.err !== 0) throw new AppError(ErrorCodes.TEMP_FILE_WRITE_FAILED, "Could not write generated image file.", { cepError: result && result.err });
-      return { path: filePath, mimeType: detected, transient: true };
+      this.verifyWrittenFile(filePath, payload.bytes.length);
+      return { path: filePath, mimeType: detected, transient: true, byteLength: payload.bytes.length };
     }
 
     remove(filePath) {

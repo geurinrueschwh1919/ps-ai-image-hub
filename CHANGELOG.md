@@ -1,5 +1,14 @@
 # 更新日志
 
+## 1.0.3 候选 — 2026-10-02
+
+- 正式支持生成结果以 PNG 或 JPEG 原始格式安全下载、保存和导入 Photoshop。
+- 修复 ExtendScript JPEG 文件尾部定位方向错误导致有效 JPEG 被误报为空或截断的问题。
+- 增加写入后字节长度复核，并继续拒绝格式伪装、HTML、损坏文件及未支持格式。
+- Photoshop 2024 人工验收：PNG 导入 **PASS**；GRS `nano-banana-fast` JPEG 生成 **PASS**；JPEG Photoshop 导入 **PASS**；Fast 模型 **PASS**；PNG 回归 **PASS**。
+- 实机中的 `UNSUPPORTED_IMAGE_FILE` 与 `INVALID_IMAGE_FILE` 错误均已消失。
+- 验收状态：`V1.0.3-JPEG-MANUAL-TEST-PASSED`。
+
 ## 1.0.2 — 2026-09-28
 
 - 修复用户 Prompt Preset 删除后重启 Photoshop 又恢复的问题。

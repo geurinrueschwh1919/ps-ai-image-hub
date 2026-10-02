@@ -611,7 +611,7 @@
       catch (error) {} finally { this.isImporting = false; this.resultView.updateImportState(this.currentResult); this.syncControls(); }
     }
     async reimportHistoryEntry(entry) {
-      if (!entry || !entry.localResultFile) return;
+      if (!entry || (!entry.localResultFile && !entry.resultUrl)) return;
       var context = entry.importContext || null;
       var currentMetadata = null;
       var documentsMatch = null;
@@ -628,9 +628,13 @@
         }
       }
       var savedOptions = historyImportOptions(context, documentsMatch);
+      var localMime = entry.localResultMimeType || (/\.jpe?g$/i.test(String(entry.localResultFile || "")) ? "image/jpeg" : "image/png");
+      var historySource = entry.localResultFile
+        ? { mimeType: localMime, previewSource: root.PSAIImageHubCompat.historyFileUrl(entry.localResultFile), importSource: { type: "local-file", path: entry.localResultFile } }
+        : { mimeType: null, previewSource: entry.resultUrl, importSource: { type: "url", url: entry.resultUrl } };
       var result = { providerId: entry.provider, modelId: entry.modelId, prompt: entry.finalPrompt || entry.prompt, taskId: entry.taskId,
         historyId: entry.id,
-        images: [{ id: entry.id, mimeType: "image/png", previewSource: root.PSAIImageHubCompat.historyFileUrl(entry.localResultFile), importSource: { type: "local-file", path: entry.localResultFile } }],
+        images: [Object.assign({ id: entry.id }, historySource)],
         importState: "notImported", importResult: null, importError: null, importOptions: savedOptions };
       if (root.PSAIImageHubCompat.logger) root.PSAIImageHubCompat.logger.info("HISTORY_REIMPORT_CONTEXT", {
         historyReimportUsedSavedContext: savedOptions.historyReimportUsedSavedContext === true,

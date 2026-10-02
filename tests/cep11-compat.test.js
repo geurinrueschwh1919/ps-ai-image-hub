@@ -55,10 +55,19 @@ test("Provider Registry mounts", () => assert.match(fs.readFileSync(path.join(so
 test("Recovery uses the isolated USER_DATA root", () => assert.match(fs.readFileSync(path.join(sourceRoot, "client/js/storage/generationRecoveryStore.js"), "utf8"), /PSAIImageHubCompat/));
 test("Provider payload implementation is unchanged apart from global namespace isolation", () => {
   const providerDirectory = path.join(sourceRoot, "client/js/providers");
+  const verifiedUrlMimeFiles = ["grsProvider.js", "genericRestProvider.js", "openAICompatibleProvider.js", "asyncTaskProvider.js"];
   for (const name of fs.readdirSync(providerDirectory).filter((item) => item.endsWith(".js"))) {
     const formal = fs.readFileSync(path.join(formalCepRoot, "client/js/providers", name), "utf8");
-    const compatSource = fs.readFileSync(path.join(providerDirectory, name), "utf8").replace(/PSAIImageHubCompat/g, "PSAIHub");
+    let compatSource = fs.readFileSync(path.join(providerDirectory, name), "utf8").replace(/PSAIImageHubCompat/g, "PSAIHub");
+    if (verifiedUrlMimeFiles.includes(name)) compatSource = compatSource.replace(/mimeType: null/g,
+      name === "asyncTaskProvider.js" ? "mimeType: mimeType" : 'mimeType: "image/png"');
     assert.equal(compatSource, formal, name);
+  }
+});
+test("URL Provider results defer MIME identity until HTTP headers and magic bytes are verified", () => {
+  const providerDirectory = path.join(sourceRoot, "client/js/providers");
+  for (const name of ["grsProvider.js", "genericRestProvider.js", "openAICompatibleProvider.js", "asyncTaskProvider.js"]) {
+    assert.match(fs.readFileSync(path.join(providerDirectory, name), "utf8"), /mimeType: null/, name);
   }
 });
 test("Formal runtime namespace is absent from Compat runtime", () => {

@@ -549,7 +549,7 @@
         if (!item || typeof item.url !== "string" || !/^https?:\/\//i.test(item.url)) return null;
         return {
           id: "grs-" + (state.id || index),
-          mimeType: "image/png",
+          mimeType: null,
           previewSource: item.url,
           importSource: { type: "url", url: item.url },
           rawResponseMeta: { id: state.id, status: state.status, progress: state.progress }

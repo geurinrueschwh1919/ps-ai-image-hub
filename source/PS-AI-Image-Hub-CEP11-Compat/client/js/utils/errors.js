@@ -87,6 +87,7 @@
     TEMP_FILE_WRITE_FAILED: "TEMP_FILE_WRITE_FAILED",
     POLLING_TIMEOUT: "POLLING_TIMEOUT",
     INVALID_PNG: "INVALID_PNG",
+    INVALID_IMAGE_FILE: "INVALID_IMAGE_FILE",
     PHOTOSHOP_IMPORT: "PHOTOSHOP_IMPORT",
     SMART_OBJECT_IMPORT_FAILED: "SMART_OBJECT_IMPORT_FAILED",
     LAYER_RENAME_FAILED: "LAYER_RENAME_FAILED",
@@ -183,6 +184,7 @@
     keyByCode[ErrorCodes.TEMP_FILE_WRITE_FAILED] = "errorTempFileWrite";
     keyByCode[ErrorCodes.POLLING_TIMEOUT] = "errorPollingTimeout";
     keyByCode[ErrorCodes.INVALID_PNG] = "errorInvalidPng";
+    keyByCode[ErrorCodes.INVALID_IMAGE_FILE] = "errorInvalidImageFile";
     keyByCode[ErrorCodes.PHOTOSHOP_IMPORT] = "errorPhotoshopImport";
     keyByCode[ErrorCodes.SMART_OBJECT_IMPORT_FAILED] = "errorSmartObjectImport";
     keyByCode[ErrorCodes.LAYER_RENAME_FAILED] = "errorLayerRename";
