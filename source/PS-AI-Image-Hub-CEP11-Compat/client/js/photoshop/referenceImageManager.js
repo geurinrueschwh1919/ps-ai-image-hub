@@ -90,6 +90,7 @@
         id: "image-input-" + Date.now() + "-" + Math.floor(Math.random() * 100000),
         sourceType: info.sourceType || "local-file",
         sourceLabel: info.sourceLabel || "local-file",
+        documentId: info.documentId === undefined || info.documentId === null ? null : Number(info.documentId),
         bounds: normalizeBounds(info.bounds),
         documentBounds: normalizeBounds(info.documentBounds),
         path: path,
@@ -125,6 +126,7 @@
       return this.readReference(filePath, {
         sourceType: mode === "selection" ? "current-selection" : "current-canvas",
         sourceLabel: mode === "selection" ? "selection" : "canvas",
+        documentId: documentMetadata.documentId,
         width: metadata.width,
         height: metadata.height,
         bounds: targetBounds,

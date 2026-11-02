@@ -8,7 +8,9 @@
   Object.assign(root.PSAIImageHubCompat, api);
 }(typeof globalThis !== "undefined" ? globalThis : this, function createHistoryStore(base64, logging, root) {
   "use strict";
-  var DEFAULT_MAX_HISTORY_COUNT = 50;
+  var DEFAULT_MAX_HISTORY_COUNT = 100;
+  var HISTORY_CAPACITY_OPTIONS = Object.freeze([50, 100, 200, 500]);
+  var HISTORY_PREFERENCES_KEY = "ps-ai-image-hub.compat.cep11.history.preferences.v1";
 
   function safeText(value, maxLength) {
     return String(value === undefined || value === null ? "" : value)
@@ -19,6 +21,32 @@
 
   function copy(value) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizedCapacity(value, fallback) {
+    var number = Number(value);
+    return HISTORY_CAPACITY_OPTIONS.indexOf(number) !== -1 ? number : fallback;
+  }
+
+  function defaultThumbnailCreator(payload) {
+    if (!payload || !payload.base64 || !root.document || typeof root.Image !== "function") return Promise.resolve(null);
+    return new Promise(function create(resolve) {
+      var image = new root.Image();
+      image.onload = function loaded() {
+        try {
+          var maximum = 320;
+          var scale = Math.min(1, maximum / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+          var canvas = root.document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+          canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+          canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+          var dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          resolve({ base64: dataUrl.slice(dataUrl.indexOf(",") + 1), extension: "jpg" });
+        } catch (error) { resolve(null); }
+      };
+      image.onerror = function failed() { resolve(null); };
+      image.src = "data:" + (payload.mimeType || "image/png") + ";base64," + payload.base64;
+    });
   }
 
   function finiteNumber(value) { var number = Number(value); return isFinite(number) ? number : null; }
@@ -72,19 +100,37 @@
       this.apiClient = options.apiClient;
       this.cepFs = options.cepFs || root.cep && root.cep.fs;
       this.base64Encoding = options.base64Encoding || root.cep && root.cep.encoding && root.cep.encoding.Base64;
-      this.maxHistoryCount = Number(options.maxHistoryCount) > 0 ? Number(options.maxHistoryCount) : DEFAULT_MAX_HISTORY_COUNT;
+      this.preferenceStorage = options.storage || null;
+      this.explicitMaxHistoryCount = Number(options.maxHistoryCount) > 0;
+      this.maxHistoryCount = this.explicitMaxHistoryCount ? Number(options.maxHistoryCount) : this.loadCapacity();
+      this.thumbnailCreator = options.thumbnailCreator || defaultThumbnailCreator;
       this.explicitRoot = options.rootPath || null;
       this.entries = null;
+    }
+    loadCapacity() {
+      try {
+        var parsed = JSON.parse(this.preferenceStorage && this.preferenceStorage.getItem(HISTORY_PREFERENCES_KEY) || "null");
+        return normalizedCapacity(parsed && parsed.maxHistoryCount, DEFAULT_MAX_HISTORY_COUNT);
+      } catch (error) { return DEFAULT_MAX_HISTORY_COUNT; }
+    }
+    getMaxHistoryCount() { return this.maxHistoryCount; }
+    setMaxHistoryCount(value) {
+      var capacity = normalizedCapacity(value, this.maxHistoryCount);
+      this.maxHistoryCount = capacity;
+      if (this.preferenceStorage) this.preferenceStorage.setItem(HISTORY_PREFERENCES_KEY, JSON.stringify({ maxHistoryCount: capacity }));
+      this.enforceCapacity();
+      return capacity;
     }
     paths() {
       var userRoot = this.explicitRoot || this.photoshopBridge.getUserDataRoot();
       var slash = userRoot.indexOf("\\") !== -1 || /^[A-Za-z]:/.test(userRoot) ? "\\" : "/";
       var rootPath = userRoot + slash + "PSAIImageHubCompat" + slash + "history";
-      return { root: rootPath, images: rootPath + slash + "images", file: rootPath + slash + "history.json", slash: slash };
+      return { root: rootPath, images: rootPath + slash + "images", originals: rootPath + slash + "originals",
+        thumbnails: rootPath + slash + "thumbnails", file: rootPath + slash + "history.json", slash: slash };
     }
     ensureDirectories() {
       var paths = this.paths();
-      [paths.root, paths.images].forEach((path) => { var result = this.cepFs.makedir(path); if (result && result.err !== 0 && (!this.cepFs.stat || this.cepFs.stat(path).err !== 0)) throw new Error("Could not create history directory."); });
+      [paths.root, paths.images, paths.originals, paths.thumbnails].forEach((path) => { var result = this.cepFs.makedir(path); if (result && result.err !== 0 && (!this.cepFs.stat || this.cepFs.stat(path).err !== 0)) throw new Error("Could not create history directory."); });
       return paths;
     }
     load() {
@@ -94,7 +140,11 @@
       try {
         var result = this.cepFs.readFile(this.paths().file);
         if (!result || result.err !== 0 || !result.data) return [];
-        var parsed = JSON.parse(result.data); if (Array.isArray(parsed)) this.entries = parsed;
+        var parsed = JSON.parse(result.data); if (Array.isArray(parsed)) this.entries = parsed.map(function normalizeEntry(entry) {
+          var normalized = entry && typeof entry === "object" ? entry : {};
+          normalized.favorite = normalized.favorite === true;
+          return normalized;
+        });
       } catch (error) { this.entries = []; }
       return copy(this.entries);
     }
@@ -117,18 +167,46 @@
       if (!read || read.err !== 0 || !read.data) return null;
       return base64.base64ToBytes(read.data);
     }
-    async persistImage(entryId, image) {
+    async persistAssets(entryId, image) {
       var payload = await this.imageBase64(image);
       var detected = payload && base64.detectImageMimeType(payload.bytes);
       var declared = payload && base64.canonicalImageMimeType(payload.mimeType);
-      if (!payload || ["image/png", "image/jpeg"].indexOf(detected) === -1) return null;
-      if (declared && declared !== "application/octet-stream" && declared !== detected) return null;
-      if (!base64.hasCompleteImageSignature(payload.bytes, detected)) return null;
+      if (!payload || ["image/png", "image/jpeg"].indexOf(detected) === -1) return { original: null, originalMimeType: null, thumbnail: null };
+      if (declared && declared !== "application/octet-stream" && declared !== detected) return { original: null, originalMimeType: null, thumbnail: null };
+      if (!base64.hasCompleteImageSignature(payload.bytes, detected)) return { original: null, originalMimeType: null, thumbnail: null };
+      payload.mimeType = detected;
       var paths = this.ensureDirectories();
-      var filePath = paths.images + paths.slash + entryId + (detected === "image/jpeg" ? ".jpg" : ".png");
-      var result = this.cepFs.writeFile(filePath, payload.base64, this.base64Encoding);
+      var originalPath = paths.originals + paths.slash + entryId + (detected === "image/jpeg" ? ".jpg" : ".png");
+      var result = this.cepFs.writeFile(originalPath, payload.base64, this.base64Encoding);
+      if (!result || result.err !== 0) return { original: null, thumbnail: null };
+      var thumbnail = null;
+      try { thumbnail = await this.thumbnailCreator(payload); } catch (error) { thumbnail = null; }
+      var thumbnailPath = null;
+      if (thumbnail && thumbnail.base64) {
+        thumbnailPath = paths.thumbnails + paths.slash + entryId + "." + (thumbnail.extension === "png" ? "png" : "jpg");
+        result = this.cepFs.writeFile(thumbnailPath, thumbnail.base64, this.base64Encoding);
+        if (!result || result.err !== 0) thumbnailPath = null;
+      }
+      return { original: originalPath, originalMimeType: detected, thumbnail: thumbnailPath };
+    }
+    async persistImage(entryId, image) { return (await this.persistAssets(entryId, image)).original; }
+    async ensureThumbnail(id) {
+      this.load();
+      var entry = this.entries.find(function match(item) { return item.id === id; });
+      if (!entry || !entry.localResultFile) return null;
+      if (entry.thumbnail && entry.thumbnail !== entry.localResultFile) return entry.thumbnail;
+      var read = this.cepFs.readFile(entry.localResultFile, this.base64Encoding);
+      if (!read || read.err !== 0 || !read.data) return null;
+      var thumbnail = null;
+      var originalPayload = base64.base64ToBytes(read.data);
+      originalPayload.mimeType = entry.localResultMimeType || base64.detectImageMimeType(originalPayload.bytes);
+      try { thumbnail = await this.thumbnailCreator(originalPayload); } catch (error) { thumbnail = null; }
+      if (!thumbnail || !thumbnail.base64) return null;
+      var paths = this.ensureDirectories();
+      var thumbnailPath = paths.thumbnails + paths.slash + entry.id + "." + (thumbnail.extension === "png" ? "png" : "jpg");
+      var result = this.cepFs.writeFile(thumbnailPath, thumbnail.base64, this.base64Encoding);
       if (!result || result.err !== 0) return null;
-      return { path: filePath, mimeType: detected };
+      entry.thumbnail = thumbnailPath; this.write(); return thumbnailPath;
     }
     baseEntry(input, result, status, identity) {
       var now = new Date();
@@ -146,7 +224,9 @@
         modelId: safeText(modelId, 160), displayName: safeText(input && input.modelDisplayName || modelId, 160),
         prompt: safeText(input && (input.finalPrompt || input.prompt) || result && result.prompt, 4000),
         finalPrompt: safeText(input && (input.finalPrompt || input.prompt) || result && result.prompt, 4000),
-        region: safeText(providerMetadata.region, 80), workspaceId: safeText(providerMetadata.workspaceId, 160),
+        region: safeText(providerMetadata.region, 80), endpointMode: safeText(providerMetadata.endpointMode, 40),
+        dedicatedApiHostFingerprint: safeText(providerMetadata.dedicatedApiHost ? "configured" : "", 32),
+        providerConfigRevision: Number(providerMetadata.providerConfigRevision) || 0,
         hasMainImage: Boolean(input && input.imageInputs && input.imageInputs.mainImage),
         mainImageCount: input && input.imageInputs && input.imageInputs.mainImage ? 1 : 0,
         referenceImageCount: input && input.imageInputs && Array.isArray(input.imageInputs.referenceImages) ? input.imageInputs.referenceImages.length : 0,
@@ -161,17 +241,20 @@
         taskId: safeText(result && result.taskId || owner.taskId, 240), status: status, generationStatus: status,
         importStatus: result && result.importState || "notImported", resultUrl: "", localResultFile: null, localResultMimeType: null, thumbnail: null,
         importedToPhotoshop: Boolean(result && result.importState === "imported"),
-        importContext: sanitizeImportContext(result && result.importResult && result.importResult.importContext),
+        importContext: sanitizeImportContext(result && result.importResult && result.importResult.importContext), favorite: false,
         errorCode: null, errorMessage: null
       };
     }
     add(entry) {
-      this.load(); var snapshot = copy(entry); this.entries.unshift(snapshot);
-      while (this.entries.length > this.maxHistoryCount) {
-        var removed = this.entries.pop();
-        if (removed && removed.localResultFile && this.cepFs.deleteFile) this.cepFs.deleteFile(removed.localResultFile);
-      }
-      this.write(); return copy(snapshot);
+      this.load(); var snapshot = copy(entry); this.entries.unshift(snapshot); this.write(); this.enforceCapacity(); return copy(snapshot);
+    }
+    enforceCapacity() {
+      this.load();
+      var ordinary = this.entries.filter(function normal(entry) { return entry.favorite !== true; });
+      var removeIds = [];
+      while (ordinary.length > this.maxHistoryCount) removeIds.push(ordinary.pop().id);
+      if (removeIds.length) this.removeEntries(removeIds);
+      return this.load();
     }
     findByExecution(executionId) {
       this.load();
@@ -227,15 +310,18 @@
       }
       var first = result && result.images && result.images[0];
       entry.resultUrl = first && first.importSource && first.importSource.type === "url" ? safeText(first.importSource.url, 2000) : "";
-      var persisted = first ? await this.persistImage(entry.id, first) : null;
-      if (persisted) { entry.localResultFile = persisted.path; entry.localResultMimeType = persisted.mimeType; }
-      entry.thumbnail = entry.localResultFile;
+      if (first) {
+        var assets = await this.persistAssets(entry.id, first);
+        entry.localResultFile = assets.original; entry.localResultMimeType = assets.originalMimeType; entry.thumbnail = assets.thumbnail;
+      }
       if (identity && identity.executionId && identity.historyId) {
         return this.writeExecutionStatus(identity, {
           status: "succeeded", generationStatus: "succeeded", importStatus: result && result.importState || "notImported",
           provider: entry.provider, providerDisplayName: entry.providerDisplayName, modelId: entry.modelId, displayName: entry.displayName, prompt: entry.prompt,
           finalPrompt: entry.finalPrompt,
-          region: entry.region, workspaceId: entry.workspaceId,
+           region: entry.region, endpointMode: entry.endpointMode,
+           dedicatedApiHostFingerprint: entry.dedicatedApiHostFingerprint,
+           providerConfigRevision: entry.providerConfigRevision,
           hasMainImage: entry.hasMainImage, referenceImageCount: entry.referenceImageCount,
           mainImageCount: entry.mainImageCount, aspectRatio: entry.aspectRatio, imageSize: entry.imageSize,
           outputSize: entry.outputSize, presetIds: entry.presetIds, presetTitles: entry.presetTitles, quality: entry.quality,
@@ -264,11 +350,31 @@
       }
       return this.add(entry);
     }
-    delete(id) {
-      this.load(); var index = this.entries.findIndex(function match(entry) { return entry.id === id; });
-      if (index < 0) return false; var removed = this.entries.splice(index, 1)[0];
-      if (removed.localResultFile && this.cepFs.deleteFile) this.cepFs.deleteFile(removed.localResultFile);
-      this.write(); return true;
+    removeEntries(ids) {
+      this.load();
+      var targets = Array.isArray(ids) ? ids.map(String) : [];
+      var removedEntries = this.entries.filter(function remove(entry) { return targets.indexOf(String(entry.id)) !== -1; });
+      if (!removedEntries.length) return false;
+      var before = copy(this.entries), backups = [], paths = [];
+      removedEntries.forEach(function collect(removed) {
+        [removed.localResultFile, removed.thumbnail].forEach(function unique(path) { if (path && paths.indexOf(path) === -1) paths.push(path); });
+      });
+      try {
+        paths.forEach((path) => { var read = this.cepFs.readFile(path, this.base64Encoding); if (read && read.err === 0) backups.push({ path: path, data: read.data }); });
+        this.entries = this.entries.filter(function keep(entry) { return targets.indexOf(String(entry.id)) === -1; }); this.write();
+        paths.forEach((path) => { var result = this.cepFs.deleteFile && this.cepFs.deleteFile(path); if (result && result.err !== 0) throw new Error("Could not delete history image."); });
+        return true;
+      } catch (error) {
+        this.entries = before;
+        backups.forEach((backup) => { this.cepFs.writeFile(backup.path, backup.data, this.base64Encoding); });
+        try { this.write(); } catch (restoreError) { /* Keep the in-memory rollback even if disk recovery fails. */ }
+        return false;
+      }
+    }
+    delete(id) { return this.removeEntries([id]); }
+    setFavorite(id, favorite) {
+      this.load(); var entry = this.entries.find(function match(item) { return item.id === id; });
+      if (!entry) return false; entry.favorite = favorite === true; this.write(); if (!entry.favorite) this.enforceCapacity(); return copy(entry);
     }
     markImported(id, importContext) {
       this.load(); var entry = this.entries.find(function match(item) { return item.id === id; });
@@ -284,11 +390,11 @@
       this.write();
     }
     clear() {
-      this.load(); this.entries.forEach((entry) => { if (entry.localResultFile && this.cepFs.deleteFile) this.cepFs.deleteFile(entry.localResultFile); });
-      this.entries = []; this.write();
+      this.load(); return this.removeEntries(this.entries.map(function id(entry) { return entry.id; }));
     }
   }
 
   return { HistoryStore: HistoryStore, DEFAULT_MAX_HISTORY_COUNT: DEFAULT_MAX_HISTORY_COUNT,
+    HISTORY_CAPACITY_OPTIONS: HISTORY_CAPACITY_OPTIONS, HISTORY_PREFERENCES_KEY: HISTORY_PREFERENCES_KEY,
     sanitizeHistoryText: safeText, sanitizeHistoryImportContext: sanitizeImportContext };
 }));

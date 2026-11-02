@@ -165,10 +165,18 @@ if (fs.existsSync(hostPath)) {
   if (/\bexecuteAction\s*\(/.test(ordinaryImportSource)) {
     fail("The ordinary importImage() path must remain Photoshop DOM-only and must not use Action Manager.");
   }
-  const executeActionCalls = hostSource.match(/\bexecuteAction\s*\(/g) || [];
-  if (executeActionCalls.length > 1 || (executeActionCalls.length === 1 && smartObjectImportStart < 0)) {
-    fail("Action Manager is allowed only for the fixed importSmartObjectToBounds() Smart Object conversion path.");
+  const smartObjectCall = 'executeAction(stringIDToTypeID("newPlacedLayer"), undefined, DialogModes.NO)';
+  const maskCall = 'executeAction(charIDToTypeID("Mk  "), descriptor, DialogModes.NO)';
+  const maskStart = hostSource.indexOf("function createRevealSelectionMask()");
+  const maskEnd = hostSource.indexOf("api.applyAutoSharpen", maskStart);
+  const maskSource = hostSource.slice(maskStart, maskEnd);
+  const smartEnd = hostSource.indexOf("function findLayerByName", smartObjectImportStart);
+  const smartSource = hostSource.slice(smartObjectImportStart, smartEnd);
+  if (!smartSource.includes(smartObjectCall) || !maskSource.includes(maskCall) ||
+      /\bexecuteAction\s*\(/.test(hostSource.replace(smartObjectCall, "").replace(maskCall, ""))) {
+    fail("Action Manager is restricted to the fixed Smart Object conversion and protected sharpening mask calls.");
   }
+
 }
 
 const htmlPath = path.join(root, "client", "index.html");

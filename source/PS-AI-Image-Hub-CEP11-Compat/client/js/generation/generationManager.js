@@ -46,7 +46,8 @@
       return { left: left, top: top, right: isFinite(Number(value.right)) ? Number(value.right) : left + width,
         bottom: isFinite(Number(value.bottom)) ? Number(value.bottom) : top + height, width: width, height: height };
     }
-    return { sourceType: String(mainImage.sourceType || "local-image"), bounds: copyBounds(mainImage.bounds),
+    return { sourceType: String(mainImage.sourceType || "local-image"),
+      documentId: mainImage.documentId === undefined || mainImage.documentId === null ? null : Number(mainImage.documentId), bounds: copyBounds(mainImage.bounds),
       documentBounds: copyBounds(mainImage.documentBounds), width: Number(mainImage.width) || null, height: Number(mainImage.height) || null };
   }
 
@@ -251,7 +252,8 @@
                 var historyMetadata = typeof provider.getHistoryMetadata === "function" ? provider.getHistoryMetadata() : {};
                 this.recoveryStore.saveSnapshot(state.id, Object.assign({}, request, {
                   providerId: provider.id, node: provider.config && provider.config.node, baseUrl: info.baseUrl || provider.config && provider.config.baseUrl,
-                   region: historyMetadata.region || "", workspaceId: historyMetadata.workspaceId || "",
+                   region: historyMetadata.region || "", dedicatedApiHost: historyMetadata.dedicatedApiHost || "",
+                   endpointMode: historyMetadata.endpointMode || "", providerConfigRevision: historyMetadata.providerConfigRevision || 0,
                    executionId: execution.executionId, historyId: execution.historyId,
                    matchMainSize: input.matchMainSize === true,
                    mainTarget: mainTarget,
@@ -283,10 +285,17 @@
           historyId: execution.historyId,
           references: request.references,
           importOptions: { matchMainSize: Boolean(mainTarget) && input.matchMainSize === true,
-            mainTarget: mainTarget, mainDimensions: mainTarget ? { width: mainTarget.width, height: mainTarget.height } : null }
+            mainTarget: mainTarget, mainDimensions: mainTarget ? { width: mainTarget.width, height: mainTarget.height } : null,
+            autoSharpenMode: input.autoSharpenMode || "off", autoSharpenIsLocal: input.autoSharpenIsLocal === true }
         };
         result.pipelineDiagnostics = { imageOptimization: request.imageOptimization || null, timings: pipelineTimings };
         result.rawResponseMeta = extracted.images[0] && extracted.images[0].rawResponseMeta || null;
+        if (callbacks && typeof callbacks.onProviderSuccess === "function") {
+          try { callbacks.onProviderSuccess(result); }
+          catch (successCallbackError) {
+            logging.logger.warn("Provider success UI cleanup failed", { errorName: String(successCallbackError && successCallbackError.name || "Error") });
+          }
+        }
         onStatus("completed", result);
         if (input.autoImport) {
           try { await this.importGeneratedResult(result, { onStatus: onStatus, cancellationToken: cancellationToken, pipelineTimings: pipelineTimings }); }
@@ -351,7 +360,9 @@
       var recoveryMetadata = typeof provider.getHistoryMetadata === "function" ? provider.getHistoryMetadata() : {};
       var savedConfiguration = savedTask && savedTask.requestConfiguration || {};
       if (savedConfiguration.region) recoveryMetadata.region = String(savedConfiguration.region);
-      if (savedConfiguration.workspaceId) recoveryMetadata.workspaceId = String(savedConfiguration.workspaceId);
+      if (savedConfiguration.dedicatedApiHost) recoveryMetadata.dedicatedApiHost = String(savedConfiguration.dedicatedApiHost);
+      if (savedConfiguration.endpointMode) recoveryMetadata.endpointMode = String(savedConfiguration.endpointMode);
+      if (savedConfiguration.providerConfigRevision !== undefined) recoveryMetadata.providerConfigRevision = Number(savedConfiguration.providerConfigRevision) || 0;
       var recoveryInput = {
         providerId: providerId, modelId: settings.modelId || provider.config.modelId,
         prompt: settings.finalPrompt || settings.prompt || "",
@@ -432,13 +443,20 @@
       if (!this.imageImporter || typeof this.imageImporter.importImages !== "function") {
         throw new AppError(ErrorCodes.PHOTOSHOP_IMPORT, "Photoshop image importer is unavailable.");
       }
-      if (result.importState === "imported") {
+      if (result.importState === "imported" && !(callbacks && callbacks.allowReimport === true)) {
         throw new AppError(ErrorCodes.RESULT_ALREADY_IMPORTED, "Generated result was already imported.");
       }
       if (result.importState === "importing") {
         throw new AppError(ErrorCodes.IMPORT_IN_PROGRESS, "Generated result import is already running.");
       }
 
+      var importImages = result.images;
+      if (callbacks && callbacks.allowReimport === true && this.historyStore && result.historyId && typeof this.historyStore.load === "function") {
+        var stored = this.historyStore.load().find(function (entry) { return entry.id === result.historyId; });
+        if (stored && stored.localResultFile && result.images.length === 1) {
+          importImages = [Object.assign({}, result.images[0], { importSource: { type: "local-file", path: stored.localResultFile } })];
+        }
+      }
       result.importState = "importing";
       result.importError = null;
       var importStartedAt = Date.now();
@@ -446,13 +464,15 @@
       var progressAware = this.imageImporter.supportsProgressCallbacks === true;
       if (!progressAware) onStatus("importing", { result: result });
       try {
-        result.importResult = await this.imageImporter.importImages(result.images, {
+        result.importResult = await this.imageImporter.importImages(importImages, {
           cancellationToken: callbacks && callbacks.cancellationToken,
           matchMainSize: Boolean(result.importOptions && result.importOptions.matchMainSize),
           mainTarget: result.importOptions && result.importOptions.mainTarget,
           mainDimensions: result.importOptions && result.importOptions.mainDimensions,
           historyReimportUsedSavedContext: Boolean(result.importOptions && result.importOptions.historyReimportUsedSavedContext),
           currentDocumentMatchesSavedImportContext: result.importOptions && result.importOptions.currentDocumentMatchesSavedImportContext,
+          autoSharpenMode: result.importOptions && result.importOptions.autoSharpenMode || "off",
+          autoSharpenIsLocal: Boolean(result.importOptions && result.importOptions.autoSharpenIsLocal),
           onStatus: function importStatus(status, payload) { onStatus(status, Object.assign({ result: result }, payload || {})); },
           onDiagnostic: function importDiagnostic(eventName, details) {
             if (eventName === "RESULT_DOWNLOAD_DONE") downloadMs += Number(details && details.downloadMs) || 0;
@@ -474,6 +494,9 @@
           catch (historyError) { logging.logger.warn("History import context write failed", { message: historyError && historyError.message }); }
         }
         onStatus("imported", { result: result });
+        if (result.importResult.autoSharpenResults && result.importResult.autoSharpenResults.some(function failed(item) { return item && item.failed; })) {
+          onStatus("autoSharpenFailed", { result: result, message: "图片已成功导入，但自动清晰化未完成。" });
+        }
         return result.importResult;
       } catch (error) {
         var normalized = error instanceof AppError

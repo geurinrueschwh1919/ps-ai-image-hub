@@ -1,77 +1,33 @@
-# PS AI Image Hub v1.0.3
+# PS AI Image Hub v1.1.0
 
-> **仅支持 CEP 11 / Photoshop Host 23.x、24.x、25.x。Photoshop 26.x 及更高版本不受支持，请勿安装。**
-
-## 支持环境
-
-- Windows 10 / 11
-- Photoshop 2022 / 23.x：目标支持
-- Photoshop 2023 / 24.x：目标支持
-- Photoshop 2024 / 25.x：已在 25.0 实机验证
-- Photoshop 2025+ / 26.x+：不支持
+Photoshop CEP 插件稳定更新，沿用 CMD 安装方式。
 
 ## 下载与安装
 
-1. 下载 `PSAIHub-Compat.zip`。
-2. 完整解压到短路径，例如 `C:\PSAIHub\` 或 `D:\PSAIHub\`；不要在压缩包内直接运行安装器。
-3. 双击 `PSAIHub-Setup.cmd`。本版本不再把未签名 IExpress EXE 作为公开安装入口。
-4. 完成后彻底关闭并重启 Photoshop。
-5. 打开 **窗口 → 扩展（旧版）→ PS AI Image Hub**。
-6. 首次使用请自行配置 Provider 和 API Key。Release 不包含任何密钥。
+下载 **PSAIHub-Compat.zip**，完整解压后双击 **PSAIHub-Setup.cmd**。不要在 ZIP 内直接运行，不要只复制 CMD；Installer 文件夹必须保留在旁边。排查启动问题可使用 Debug/PSAIHub-Debug.cmd，手动安装文件位于 Manual。
 
-普通启动脚本无法启动或安装失败时，使用 `Debug\PSAIHub-Debug.cmd`，诊断窗口会保留退出代码。如果安全策略阻止脚本，可将 `Manual\PS-AI-Image-Hub-CEP11-Compat` 复制到 `%APPDATA%\Adobe\CEP\extensions\PS-AI-Image-Hub-CEP11-Compat`，完成无需执行程序的手动安装。
+PSAIHub-Compat.sha256.txt 用于校验 ZIP。GitHub 自动生成的 Source code 是源码包，普通用户请下载 PSAIHub-Compat.zip。
 
-> Windows 仍可能提示来自互联网的 ZIP、CMD 或 PowerShell 文件存在风险。请只从本 Release 下载并核对 SHA-256；不要关闭 Defender，也不要安装来源不明或自签名根证书。
+## 更新内容
 
-## v1.0.3 更新
+- 自动清晰化默认关闭，支持微锐化、自然、标准、强力和自定义；保留原始生成层，支持局部边缘保护。
+- History 支持 50/100/200/500 条普通历史，默认 100；收藏保护、分页缩略图，重新导入使用原图。
+- 面板常驻，支持主动重新加载插件界面。
+- 生成按钮移到提示词下方；高级设置和结果预览按需展开。
+- 设置分区折叠，版本信息移到设置底部，保存提示自动消失。
+- 删除生成图层后可从结果预览重新导入，清晰化按文档和图层 ID 定位。
+- 内置 10 个超清修复提示词预设，可隐藏并手动恢复；预设轨道最大值显示修复。
+- 保留 PNG/JPEG 导入和自定义第三方 API Provider；更新百炼共享／专属 API Host 配置流程。
+- 不包含特效实验室、辉光或 Auto Color Fusion。
 
-- 支持经过安全校验的 PNG/JPEG 生成结果以原始格式导入 Photoshop。
-- 修复 GRS `nano-banana-fast` 生成成功但 JPEG 无法导入的问题。
-- 修复 ExtendScript JPEG 文件尾部定位方向错误、错误格式声明和误导性的 Mock/PNG 错误文案。
-- JPEG History 保存与重新导入继续使用原始图片；失败 History 可通过有效结果地址重新下载导入。
-- 写入后回读并核对字节长度，拒绝 Content-Type、扩展名与真实 Magic Bytes 不一致的文件。
-- JPEG 不经过 Canvas 重编码；PNG 原有导入行为保持不变。
-- 正式 Extension ID、storage namespace、用户数据目录及 v1.0.2 用户设置保持不变。
+## 兼容与升级
 
-人工验收：`V1.0.3-JPEG-MANUAL-TEST-PASSED`。
+Windows 10/11；Photoshop 25.0 已经用户实机验证。Photoshop 23.x、24.x 为静态和模拟兼容，未完成对应版本实机验证。25.0–25.11 为当前 CEP 11 声明范围；25.12+ 属于 CEP 12 边界，未声明验证通过。Photoshop 26.x 及更高版本不支持。
 
-> Auto Sharpen 实验功能不包含在 v1.0.3 中。WebP 与 AVIF 当前仍不支持。Photoshop 23/24 仅完成静态与模拟兼容验证，尚未完成对应版本实机验证。
+沿用正式 Compat Extension ID、存储键和 PSAIImageHubCompat 数据目录，保留已有 API 服务、密钥、预设和历史；不会读取实验版数据。升级前建议自行备份本机插件数据。API 调用可能由服务商收费，插件不内置模型或免费额度。
 
-## v1.0.2 更新
+## 校验
 
-- 修复用户 Prompt Preset 删除后重启 Photoshop 又恢复的问题。
-- 删除时同步清理 Favorites、Recent、Preset Stack、重命名与参数值关联状态。
-- 保留完整 Prompt Preset UI、JSON/ZIP 导入、分类、收藏、搜索和组合功能。
+ZIP SHA-256：
 
-## v1.0.1 安装器修复
-
-- 移除公开 ZIP 中的未签名 IExpress EXE，避免其自解压启动链被 Windows 拦截后无提示退出。
-- 默认使用透明的 `PSAIHub-Setup.cmd` 启动原有安装 UI。
-- Debug 启动器始终保留退出代码和日志位置，不再一闪即退。
-- 增加完整 CEP Runtime 手动复制兜底。
-
-## 主要功能
-
-- GRS、阿里云百炼、Mock Provider。
-- 主图、参考图、当前画布与当前选区。
-- History、原 Task Recovery、targetBounds 再导入对齐与文档尺寸差异提示。
-- 本地 JSON / ZIP Prompt Preset、参数预设、分类中文显示、收藏、最近使用、200ms 搜索 debounce。
-- Preset Stack、Replace、Append。
-- 自动/手动 Photoshop 导入。
-- 禁止 Canvas upscale；小图放大由 Photoshop 智能对象完成，并在导入前提示清晰度风险。
-
-## 已知限制
-
-- 不支持 Photoshop 26.x+。
-- PS23/PS24 建议继续在对应真实 Photoshop 环境验收。
-- 停止等待不等于服务端取消；Recovery 只查询原 Task，不重新 Submit。
-- 智能对象缩放不能创造原图不存在的细节。
-- 云端请求受服务商 CORS、网络与计费策略影响。
-
-## SHA-256
-
-`PSAIHub-Compat.zip`
-
-```text
 {{ZIP_SHA256}}
-```

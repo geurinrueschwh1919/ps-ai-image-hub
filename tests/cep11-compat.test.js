@@ -53,14 +53,22 @@ test("History mounts in the panel source", () => assert.match(fs.readFileSync(pa
 test("Preset modules mount", () => assert.match(fs.readFileSync(path.join(sourceRoot, "client/index.html"), "utf8"), /promptPresetStack\.js/));
 test("Provider Registry mounts", () => assert.match(fs.readFileSync(path.join(sourceRoot, "client/js/app.js"), "utf8"), /new hub\.ProviderRegistry/));
 test("Recovery uses the isolated USER_DATA root", () => assert.match(fs.readFileSync(path.join(sourceRoot, "client/js/storage/generationRecoveryStore.js"), "utf8"), /PSAIImageHubCompat/));
-test("Provider payload implementation is unchanged apart from global namespace isolation", () => {
+test("Provider payload implementation is unchanged apart from namespace and scoped Bailian hotfix", () => {
   const providerDirectory = path.join(sourceRoot, "client/js/providers");
   const verifiedUrlMimeFiles = ["grsProvider.js", "genericRestProvider.js", "openAICompatibleProvider.js", "asyncTaskProvider.js"];
+  const scopedBailianHotfixFiles = new Set(["aliyunBailianCatalog.js", "aliyunBailianProvider.js"]);
   for (const name of fs.readdirSync(providerDirectory).filter((item) => item.endsWith(".js"))) {
-    const formal = fs.readFileSync(path.join(formalCepRoot, "client/js/providers", name), "utf8");
-    let compatSource = fs.readFileSync(path.join(providerDirectory, name), "utf8").replace(/PSAIImageHubCompat/g, "PSAIHub");
+    const formal = fs.readFileSync(path.join(formalCepRoot, "client/js/providers", name), "utf8").replace(/\r\n/g, "\n");
+    let compatSource = fs.readFileSync(path.join(providerDirectory, name), "utf8")
+      .replace(/\r\n/g, "\n")
+      .replace(/PSAIImageHubCompat/g, "PSAIHub");
     if (verifiedUrlMimeFiles.includes(name)) compatSource = compatSource.replace(/mimeType: null/g,
       name === "asyncTaskProvider.js" ? "mimeType: mimeType" : 'mimeType: "image/png"');
+    if (scopedBailianHotfixFiles.has(name)) {
+      assert.notEqual(compatSource, formal, name + " must carry the formal-only v1.0.4 Bailian hotfix");
+      assert.match(compatSource, /endpointMode/, name + " must retain endpoint-mode handling");
+      continue;
+    }
     assert.equal(compatSource, formal, name);
   }
 });

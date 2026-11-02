@@ -56,7 +56,7 @@ test.after(() => fs.rmSync(roundtripRoot, { recursive: true, force: true }));
 
 test("1 CMD package and launchers are current", () => {
   assert.ok(fs.statSync(path.join(installerPackageSource,"payload.zip")).size > 0);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(installerPackageSource,"metadata.json"),"utf8").replace(/^\uFEFF/,"")).bundleVersion,"1.0.3");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(installerPackageSource,"metadata.json"),"utf8").replace(/^\uFEFF/,"")).bundleVersion,"1.1.0");
   assert.ok(fs.statSync(path.join(projectRoot,"installer","src","launch-portable.cmd")).size > 0);
 });
 test("2 public release uses transparent CMD launcher", () => {

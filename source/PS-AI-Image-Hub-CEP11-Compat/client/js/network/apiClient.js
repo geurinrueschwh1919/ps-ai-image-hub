@@ -38,6 +38,17 @@
     return sanitizeResponsePreview(text).slice(0, 240);
   }
 
+  function safeServiceErrorMetadata(responseText) {
+    var text = String(responseText || "").slice(0, 2000);
+    try {
+      var parsed = JSON.parse(text);
+      var source = parsed && parsed.error && typeof parsed.error === "object" ? parsed.error : parsed || {};
+      var requestId = String(parsed && (parsed.request_id || parsed.requestId) || source.request_id || source.requestId || "");
+      return { serviceCode: String(source.code || parsed && parsed.code || "").replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 100),
+        requestId: requestId.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 120) };
+    } catch (error) { return { serviceCode: "", requestId: "" }; }
+  }
+
   function mergeDetails(settings, extra) {
     return Object.assign({}, settings && settings.diagnostics || {}, extra || {});
   }
@@ -194,9 +205,12 @@
               : settings.httpErrorCode || (xhr.status >= 500 ? ErrorCodes.HTTP_SERVER : ErrorCodes.HTTP_CLIENT);
             var responseText = "";
             try { responseText = String(xhr.responseText || "").slice(0, 500); } catch (error) { responseText = ""; }
+            var serviceMetadata = safeServiceErrorMetadata(responseText);
             reject(new AppError(code, "HTTP request failed with status " + xhr.status + ".", mergeDetails(settings, {
               status: xhr.status,
               serviceMessage: safeServiceMessage(responseText),
+              serviceCode: serviceMetadata.serviceCode,
+              requestId: serviceMetadata.requestId,
               effectiveTimeoutMs: xhr.timeout,
               durationMs: xhr._psaiDurationMs
             })));

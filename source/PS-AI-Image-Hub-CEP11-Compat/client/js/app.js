@@ -3,6 +3,9 @@
   var hub = root.PSAIImageHubCompat;
   var bootStage = "bootstrap";
 
+  if (root.__PSAIImageHubCompatBootstrapStarted) return;
+  root.__PSAIImageHubCompatBootstrapStarted = true;
+
   function safeFailure(error) {
     var stack = String(error && error.stack || "").slice(0, 1200);
     var location = stack.match(/([^\s()]+\.js):(\d+):(\d+)/);
@@ -19,10 +22,10 @@
 
   function bootEvent(name, data) {
     root.__PSAIImageHubCompatBootDiagnostics = root.__PSAIImageHubCompatBootDiagnostics || [];
-    root.__PSAIImageHubCompatBootDiagnostics.push({ event: name, data: data || null, at: new Date().toISOString() });
+    root.__PSAIImageHubCompatBootDiagnostics.push({ event: name, diagnosticsId: "compat", data: data || null, at: new Date().toISOString() });
     try {
       if (hub && hub.logger && typeof hub.logger.info === "function") hub.logger.info(name, data);
-      else if (root.console && typeof root.console.log === "function") root.console.log("[PS AI Image Hub CEP] " + name, data || "");
+      else if (root.console && typeof root.console.log === "function") root.console.log("[PS AI Image Hub PS AI Image Hub] " + name, data || "");
     } catch (error) { /* Diagnostics must never break startup. */ }
   }
 
@@ -34,6 +37,16 @@
   function start() {
     bootStage = "document";
     bootEvent("BOOT_START");
+    bootStage = "persistent-panel";
+    var persistentPanel = typeof hub.requestPersistentPanel === "function"
+      ? hub.requestPersistentPanel({ logger: hub.logger })
+      : { requested: false, failed: true };
+    bootEvent("BOOT_PERSISTENT_PANEL_READY", {
+      requested: persistentPanel.requested === true,
+      duplicate: persistentPanel.duplicate === true,
+      degraded: persistentPanel.failed === true
+    });
+    bootStage = "document";
     var appRoot = document.getElementById("app");
     if (!appRoot) throw new Error("PS AI Image Hub CEP root element was not found.");
     bootStage = "config";
@@ -119,10 +132,19 @@
       return typeof hub.ImportSizingManager === "function" ? new hub.ImportSizingManager({ photoshopBridge: photoshopBridge,
         cepFs: compatFileDialog }) : null;
     });
-    var imageImporter = new hub.ImageImporter({ photoshopBridge: photoshopBridge, imageFileStore: imageFileStore, importSizingManager: importSizingManager });
+    var autoSharpenPreferenceStore = optionalModule("BOOT_AUTO_SHARPEN_STORE", function createAutoSharpenStore() {
+      return typeof hub.AutoSharpenPreferenceStore === "function"
+        ? new hub.AutoSharpenPreferenceStore({ storage: localStorageCompat.storage }) : null;
+    });
+    var autoSharpenManager = optionalModule("BOOT_AUTO_SHARPEN", function createAutoSharpen() {
+      return typeof hub.AutoSharpenManager === "function"
+        ? new hub.AutoSharpenManager({ photoshopBridge: photoshopBridge, preferenceStore: autoSharpenPreferenceStore }) : null;
+    });
+    var imageImporter = new hub.ImageImporter({ photoshopBridge: photoshopBridge, imageFileStore: imageFileStore,
+      importSizingManager: importSizingManager, autoSharpenManager: autoSharpenManager });
     var referenceImageManager = new hub.ReferenceImageManager({ photoshopBridge: photoshopBridge, cepFs: compatFileDialog });
     var historyStore = new hub.HistoryStore({ photoshopBridge: photoshopBridge, apiClient: apiClient, cepFs: compatFileDialog,
-      maxHistoryCount: 50 });
+      storage: localStorageCompat.storage });
     bootStage = "prompt-preset";
     var promptPresetStore = optionalModule("BOOT_PROMPT_PRESET_STORE", function createPromptPresetStore() {
       return typeof hub.PromptPresetStore === "function" ? new hub.PromptPresetStore({
@@ -131,7 +153,7 @@
     });
     var promptPresetRegistry = optionalModule("BOOT_PROMPT_PRESET_REGISTRY", function createPromptPresetRegistry() {
       return promptPresetStore && typeof hub.PromptPresetRegistry === "function"
-        ? new hub.PromptPresetRegistry({ store: promptPresetStore }) : null;
+        ? new hub.PromptPresetRegistry({ store: promptPresetStore, factoryPresets: hub.BUILTIN_REPAIR_PRESETS || [] }) : null;
     });
     var promptPresetCompiler = optionalModule("BOOT_PROMPT_PRESET_COMPILER", function createPromptPresetCompiler() {
       return typeof hub.PromptPresetCompiler === "function" ? new hub.PromptPresetCompiler() : null;
@@ -170,6 +192,7 @@
       promptPresetRegistry: promptPresetRegistry,
       promptPresetCompiler: promptPresetCompiler,
       promptPresetStack: promptPresetStack,
+      autoSharpenManager: autoSharpenManager,
       compatFileDialog: compatFileDialog,
       cepCapabilities: cepCapabilities,
       hostCapabilities: hostCapabilities,
@@ -188,7 +211,7 @@
       root.BOOT_COMPATIBILITY_REPORT = hub.redactDiagnostics(bootCompatibilityReport, 0);
       bootEvent("BOOT_HOST_CAPABILITIES_READY", root.BOOT_COMPATIBILITY_REPORT);
     });
-    hub.logger.info("CEP11 Compat panel initialized", { providerCount: registry.size, nodeEnabled: false,
+    hub.logger.info("PS AI Image Hub panel initialized", { diagnosticsId: "compat", providerCount: registry.size, nodeEnabled: false,
       profile: profile, persistentStorage: localStorageCompat.persistent });
   }
 

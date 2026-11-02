@@ -45,6 +45,7 @@
   class PromptPresetRegistry {
     constructor(options) {
       this.store = options && options.store || null;
+      this.factoryPresets = copy(options && options.factoryPresets || []).map(function (preset) { preset.factory = true; return preset; });
       this.presets = [];
       this.searchIndex = {};
       this.lastDeletePersistent = true;
@@ -55,8 +56,15 @@
       this.presets.forEach(function add(item) { index[item.id] = searchText(item); });
       this.searchIndex = index;
     }
-    reload() { this.presets = this.store && typeof this.store.load === "function" ? this.store.load() : []; this.rebuildSearchIndex(); return this.list(); }
-    persist() { if (this.store && typeof this.store.save === "function") this.store.save(this.presets); this.rebuildSearchIndex(); }
+    withFactories(presets) {
+      var result = (presets || []).slice();
+      this.factoryPresets.forEach(function (preset) {
+        if (!result.some(function (item) { return item.id === preset.id; })) result.push(copy(preset));
+      });
+      return result;
+    }
+    reload() { this.presets = this.withFactories(this.store && typeof this.store.load === "function" ? this.store.load() : []); this.rebuildSearchIndex(); return this.list(); }
+    persist() { if (this.store && typeof this.store.save === "function") this.store.save(this.presets.filter((preset) => !preset.factory || !this.factoryPresets.some(function (factory) { return factory.id === preset.id; }))); this.rebuildSearchIndex(); }
     stateSnapshot() { return this.store && typeof this.store.loadState === "function" ? this.store.loadState() : null; }
     decorate(preset, state) {
       if (!preset) return null;
@@ -136,7 +144,7 @@
       }
       if (this.store && typeof this.store.deletePreset === "function") {
         var result = this.store.deletePreset(preset.id);
-        this.presets = result.state.presets.slice();
+        this.presets = this.withFactories(result.state.presets);
         this.lastDeletePersistent = result.persistent !== false;
         this.rebuildSearchIndex();
         return true;

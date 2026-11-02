@@ -38,10 +38,10 @@ test("CEP logger and Provider Store remove credential fields", () => {
 
 test("Bridge serialization escapes arguments and rejects arbitrary functions", () => {
   assert.equal(serializeExtendScriptString('C:\\A\n"B"'), '"C:\\\\A\\n\\"B\\""');
-  assert.equal(buildHostCall("importImage", ["C:\\test.png"]), 'PSAIImageHubCompatHost.importImage("C:\\\\test.png")');
+  assert.equal(buildHostCall("importImage", ["C:\\test.png", null]), 'PSAIImageHubCompatHost.importImage("C:\\\\test.png","null")');
   assert.equal(
-    buildHostCall("importImage", ['C:\\用户 图片\\A "测试"\\结果.png']),
-    'PSAIImageHubCompatHost.importImage("C:\\\\用户 图片\\\\A \\"测试\\"\\\\结果.png")'
+    buildHostCall("importImage", ['C:\\用户 图片\\A "测试"\\结果.png', 42]),
+    'PSAIImageHubCompatHost.importImage("C:\\\\用户 图片\\\\A \\"测试\\"\\\\结果.png","42")'
   );
   assert.throws(
     () => serializeExtendScriptString("C:\\bad\0path.png"),

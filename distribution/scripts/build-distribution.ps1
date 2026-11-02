@@ -4,8 +4,8 @@ param()
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
-$distributionVersion = "v1.0.3"
-$productVersion = "1.0.3"
+$distributionVersion = "v1.1.0"
+$productVersion = "1.1.0"
 $packageFolderName = "PSAIHub-Compat"
 $zipFileName = $packageFolderName + ".zip"
 $releaseFileName = "PSAIHub-Setup.cmd"

@@ -115,9 +115,9 @@ test("Formal / Compat History import context and re-import options remain schema
 
 test("Compat bridge keeps the Formal business methods plus its capability method", () => {
   Object.keys(formalBridge.ALLOWED_HOST_METHODS).forEach((name) => {
-    assert.equal(compatBridge.ALLOWED_HOST_METHODS[name], formalBridge.ALLOWED_HOST_METHODS[name], name);
+    assert.equal(compatBridge.ALLOWED_HOST_METHODS[name], name === "importImage" ? 2 : name === "importSmartObjectToBounds" ? 6 : formalBridge.ALLOWED_HOST_METHODS[name], name);
   });
-  assert.equal(compatBridge.ALLOWED_HOST_METHODS.importSmartObjectToBounds, 5);
+  assert.equal(compatBridge.ALLOWED_HOST_METHODS.importSmartObjectToBounds, 6);
   assert.equal(compatBridge.ALLOWED_HOST_METHODS.getHostCapabilities, 0);
 });
 

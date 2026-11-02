@@ -31,14 +31,25 @@
     loadConfiguredProviders(preloadedConfigs) {
       if (!this.providerStore || !this.providerFactory) return [];
       this.configs = Array.isArray(preloadedConfigs) ? preloadedConfigs.slice() : this.providerStore.load();
+      var seenAliyun = false;
+      this.configs = this.configs.slice().reverse().filter(function unique(config) {
+        if (!config || config.id !== "aliyun-bailian") return true;
+        if (seenAliyun) return false;
+        seenAliyun = true; return true;
+      }).reverse();
+      var beforeMigration = JSON.stringify(this.configs);
       this.configs.forEach((config) => {
         try {
           var existing = this.registry.get(config.id);
-          if (existing && existing.isBuiltIn && typeof existing.updateConfig === "function") existing.updateConfig(config);
+          if (existing && existing.isBuiltIn && typeof existing.updateConfig === "function") {
+            existing.updateConfig(config);
+            if (config.id === "aliyun-bailian") Object.assign(config, existing.config);
+          }
           else this.registry.register(this.providerFactory.create(config));
         }
         catch (error) { /* Invalid saved records remain editable and do not stop panel startup. */ }
       });
+      if (JSON.stringify(this.configs) !== beforeMigration) this.providerStore.save(this.configs);
       return this.configs.slice();
     }
     listConfiguredProviders() { return this.configs.slice(); }
@@ -59,6 +70,10 @@
         throw new AppError(ErrorCodes.INVALID_PROVIDER_CONFIG, "Provider persistence is unavailable.");
       }
       var existingIndex = this.configs.findIndex(function match(item) { return item.id === config.id; });
+      if (config.id === "aliyun-bailian") {
+        var previous = existingIndex >= 0 ? this.configs[existingIndex] : this.getProviderConfig(config.id) || {};
+        config = Object.assign({}, config, { providerConfigRevision: Math.max(0, Math.floor(Number(previous.providerConfigRevision) || 0)) + 1 });
+      }
       var secretName = "provider:" + config.id + ":apiKey";
       var existingSecret = this.secretStore.get(secretName);
       var keyAction = options && options.keyAction || (apiKey ? KEY_UPDATED : KEY_UNCHANGED);

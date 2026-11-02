@@ -127,7 +127,7 @@ test("Bailian Image generation completes through mocked Submit and Poll", async 
     { output: { task_status: "SUCCEEDED", task_id: "bailian-task", choices: [{ message: { content: [{ image: "https://example.com/bailian.png", type: "image" }] } }] }, request_id: "poll" }
   ];
   let calls = 0;
-  const provider = new AliyunBailianProvider({ region: "cn-beijing", workspaceId: "workspace-test", modelId: "qwen-image-3.0" }, {
+  const provider = new AliyunBailianProvider({ region: "cn-beijing", endpointMode: "shared", modelId: "qwen-image-3.0" }, {
     secretStore: { get() { return "unit-test-key"; } },
     apiClient: { async requestJson() { calls += 1; return responses.shift(); } },
     asyncTaskStore: new AsyncTaskStore({ storage: memoryStorage() }),

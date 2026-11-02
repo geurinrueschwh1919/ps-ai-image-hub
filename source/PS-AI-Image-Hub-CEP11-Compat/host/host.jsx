@@ -94,6 +94,84 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     return total;
   }
 
+  function documentId(documentReference) {
+    try { return Number(documentReference.id); }
+    catch (error) { return -1; }
+  }
+
+  function layerId(layerReference) {
+    try { return Number(layerReference.id); }
+    catch (error) { return -1; }
+  }
+
+  function collectLayerIds(layers, ids) {
+    var result = ids || [];
+    var index;
+    var value;
+    for (index = 0; layers && index < layers.length; index += 1) {
+      value = layerId(layers[index]);
+      if (value >= 0) result.push(value);
+      if (layers[index].layers) collectLayerIds(layers[index].layers, result);
+    }
+    return result;
+  }
+
+  function addedLayerIds(before, after) {
+    var known = {};
+    var added = [];
+    var index;
+    for (index = 0; index < before.length; index += 1) known[String(before[index])] = true;
+    for (index = 0; index < after.length; index += 1) {
+      if (!known[String(after[index])]) added.push(after[index]);
+    }
+    return added;
+  }
+
+  function documentById(id) {
+    var expected = Number(id);
+    var index;
+    if (!(expected >= 0)) return null;
+    for (index = 0; index < app.documents.length; index += 1) {
+      if (documentId(app.documents[index]) === expected) return app.documents[index];
+    }
+    return null;
+  }
+
+  function activateCompositeChannels(documentReference) {
+    var components;
+    if (!documentReference) return false;
+    try {
+      components = documentReference.componentChannels;
+      if (!components || !components.length) return false;
+      documentReference.activeChannels = components;
+      return true;
+    } catch (error) { return false; }
+  }
+
+  function activeChannelNames(documentReference) {
+    var names = [];
+    var channels;
+    var index;
+    try { channels = documentReference.activeChannels; }
+    catch (error) { channels = []; }
+    for (index = 0; channels && index < channels.length; index += 1) names.push(String(channels[index].name));
+    return names;
+  }
+
+  function prepareImportTarget(expectedDocumentId) {
+    var hasExpectedDocument = expectedDocumentId !== null && expectedDocumentId !== undefined && expectedDocumentId !== "" && Number(expectedDocumentId) >= 0;
+    var target = hasExpectedDocument ? documentById(expectedDocumentId) : app.activeDocument;
+    if (!target) raiseHostError("PHOTOSHOP_IMPORT_DOCUMENT_LOST", "The target Photoshop document is no longer open.");
+    if (hasExpectedDocument) {
+      app.activeDocument = target;
+      if (!activateCompositeChannels(target)) {
+        raiseHostError("PHOTOSHOP_IMPORT_CHANNEL_RESTORE_FAILED", "Photoshop could not restore the composite color channels before import.");
+      }
+      if (!target.activeLayer) raiseHostError("PHOTOSHOP_IMPORT_LAYER_STATE_INVALID", "Photoshop has no valid active layer for import.");
+    }
+    return target;
+  }
+
   function assertSupportedImageFile(fileReference) {
     var name = String(fileReference.name || "").toLowerCase();
     var opened = false;
@@ -198,6 +276,11 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     return bounds;
   }
 
+  function boundsObject(bounds) {
+    return { left: pixels(bounds[0]), top: pixels(bounds[1]), right: pixels(bounds[2]), bottom: pixels(bounds[3]),
+      width: pixels(bounds[2]) - pixels(bounds[0]), height: pixels(bounds[3]) - pixels(bounds[1]) };
+  }
+
   api.ping = function ping() {
     return success({ message: "pong", bridgeVersion: "1.0" });
   };
@@ -251,6 +334,7 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
       try { selectionBounds(documentReference); }
       catch (selectionError) { hasSelection = false; }
       return success({
+        documentId: documentId(documentReference),
         name: String(documentReference.name),
         width: pixels(documentReference.width),
         height: pixels(documentReference.height),
@@ -309,7 +393,7 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     }
   };
 
-  api.importImage = function importImage(filePath) {
+  api.importImage = function importImage(filePath, expectedDocumentId) {
     var targetDocument = null;
     var sourceDocument = null;
     var sourceLayer = null;
@@ -317,6 +401,8 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     var fileReference = null;
     var layerName = null;
     var layerCountBefore = 0;
+    var layerIdsBefore = [];
+    var newLayerIds = [];
     try {
       if (!filePath) return failure("IMPORT_SOURCE_MISSING", "Image file path is required.");
       if (app.documents.length === 0) return failure("NO_PHOTOSHOP_DOCUMENT", "No Photoshop document is open.");
@@ -325,9 +411,10 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
       if (!fileReference.exists) return failure("IMAGE_FILE_NOT_FOUND", "The generated image file does not exist.");
       assertSupportedImageFile(fileReference);
 
-      targetDocument = app.activeDocument;
+      targetDocument = prepareImportTarget(expectedDocumentId);
       layerName = nextGeneratedLayerName(targetDocument);
       layerCountBefore = countLayers(targetDocument.layers);
+      layerIdsBefore = collectLayerIds(targetDocument.layers);
 
       try {
         sourceDocument = app.open(fileReference);
@@ -351,7 +438,8 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
         raiseHostError("PHOTOSHOP_IMPORT", "Photoshop could not duplicate the generated image into the current document.");
       }
 
-      if (countLayers(targetDocument.layers) !== layerCountBefore + 1) {
+      newLayerIds = addedLayerIds(layerIdsBefore, collectLayerIds(targetDocument.layers));
+      if (countLayers(targetDocument.layers) !== layerCountBefore + 1 || layerIdsBefore.length > 0 && newLayerIds.length !== 1) {
         raiseHostError("PHOTOSHOP_IMPORT", "Photoshop did not create exactly one generated image layer.");
       }
       if (!importedLayer) importedLayer = targetDocument.activeLayer;
@@ -365,8 +453,11 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
 
       return success({
         imported: true,
+        layerId: layerId(importedLayer),
+        addedLayerIds: newLayerIds,
         layerName: String(importedLayer.name),
         layerType: String(importedLayer.typename || "ArtLayer"),
+        documentId: documentId(targetDocument),
         documentName: String(targetDocument.name),
         documentWidth: pixels(targetDocument.width),
         documentHeight: pixels(targetDocument.height),
@@ -387,7 +478,7 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     }
   };
 
-  api.importSmartObjectToBounds = function importSmartObjectToBounds(filePath, targetLeft, targetTop, targetWidth, targetHeight) {
+  api.importSmartObjectToBounds = function importSmartObjectToBounds(filePath, targetLeft, targetTop, targetWidth, targetHeight, expectedDocumentId) {
     var targetDocument = null;
     var sourceDocument = null;
     var sourceLayer = null;
@@ -405,6 +496,8 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
     var beforeBounds = null;
     var afterBounds = null;
     var finalBounds = null;
+    var layerIdsBefore = [];
+    var newLayerIds = [];
     var deltaX = 0;
     var deltaY = 0;
     try {
@@ -417,9 +510,10 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
       if (!fileReference.exists) return failure("IMAGE_FILE_NOT_FOUND", "The generated image file does not exist.");
       assertSupportedImageFile(fileReference);
 
-      targetDocument = app.activeDocument;
+      targetDocument = prepareImportTarget(expectedDocumentId);
       layerName = nextGeneratedLayerName(targetDocument);
       layerCountBefore = countLayers(targetDocument.layers);
+      layerIdsBefore = collectLayerIds(targetDocument.layers);
       try { sourceDocument = app.open(fileReference); }
       catch (openError) { raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Photoshop could not open the generated image for Smart Object import."); }
       if (!sourceDocument || !sourceDocument.layers || sourceDocument.layers.length === 0) {
@@ -460,13 +554,17 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
       catch (translateError) { raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Photoshop could not align the Smart Object to the target region."); }
       finalBounds = layerBounds(importedLayer);
       if (!finalBounds) raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Photoshop could not confirm the final Smart Object bounds.");
-      if (countLayers(targetDocument.layers) !== layerCountBefore + 1) {
+      newLayerIds = addedLayerIds(layerIdsBefore, collectLayerIds(targetDocument.layers));
+      if (countLayers(targetDocument.layers) !== layerCountBefore + 1 || layerIdsBefore.length > 0 && newLayerIds.length !== 1) {
         raiseHostError("SMART_OBJECT_IMPORT_FAILED", "Photoshop did not create exactly one Smart Object layer.");
       }
       return success({
         imported: true,
+        layerId: layerId(importedLayer),
+        addedLayerIds: newLayerIds,
         layerName: String(importedLayer.name),
         layerType: String(importedLayer.kind || importedLayer.typename || "SmartObject"),
+        documentId: documentId(targetDocument),
         documentName: String(targetDocument.name),
         documentWidth: pixels(targetDocument.width),
         documentHeight: pixels(targetDocument.height),
@@ -493,6 +591,170 @@ var PSAIImageHubCompatHost = PSAIImageHubCompatHost || {};
         try { app.activeDocument = targetDocument; }
         catch (restoreError) {}
       }
+    }
+  };
+
+  function findLayerByName(container, name) {
+    var index;
+    var layer;
+    if (!container || !container.layers) return null;
+    for (index = 0; index < container.layers.length; index += 1) {
+      layer = container.layers[index];
+      if (String(layer.name) === String(name)) return layer;
+      if (layer.layers) {
+        var nested = findLayerByName(layer, name);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+
+  function createRevealSelectionMask() {
+    var descriptor = new ActionDescriptor();
+    var newReference = new ActionReference();
+    var maskReference = new ActionReference();
+    newReference.putClass(charIDToTypeID("Chnl"));
+    descriptor.putReference(charIDToTypeID("Nw  "), newReference);
+    maskReference.putEnumerated(charIDToTypeID("Chnl"), charIDToTypeID("Chnl"), charIDToTypeID("Msk "));
+    descriptor.putReference(charIDToTypeID("At  "), maskReference);
+    descriptor.putEnumerated(charIDToTypeID("Usng"), charIDToTypeID("UsrM"), charIDToTypeID("RvlS"));
+    executeAction(charIDToTypeID("Mk  "), descriptor, DialogModes.NO);
+  }
+
+  function directLayerByName(container, name, excludedLayer) {
+    var index;
+    var layer;
+    if (!container || !container.layers) return null;
+    for (index = 0; index < container.layers.length; index += 1) {
+      layer = container.layers[index];
+      if (layer !== excludedLayer && String(layer.name) === String(name)) return layer;
+    }
+    return null;
+  }
+
+  api.applyAutoSharpen = function applyAutoSharpen(layerName, blendMode, opacity, radius, isLocal, contract, feather, suppressColorFringing) {
+    var targetDocument = null;
+    var originalLayer = null;
+    var sharpenLayer = null;
+    var group = null;
+    var oldSharpenLayer = null;
+    var groupCreated = false;
+    var originalSelection = null;
+    var maskApplied = false;
+    var replacedExisting = false;
+    var safeRadius = Number(radius);
+    var safeOpacity = Number(opacity);
+    var safeContract = Math.max(0, Number(contract) || 0);
+    var safeFeather = Math.max(0, Number(feather) || 0);
+    var shouldDesaturate = suppressColorFringing === true || String(suppressColorFringing) === "true";
+    try {
+      if (!blendMode || blendMode === "none" || blendMode === "off") {
+        return success({ applied: false, success: false, skipped: true, reason: "sharpening-disabled" });
+      }
+      if (app.documents.length === 0) return failure("NO_PHOTOSHOP_DOCUMENT", "No Photoshop document is open.");
+      if (!(safeRadius >= 0.1 && safeRadius <= 10.0)) return failure("AUTO_SHARPEN_INVALID", "Auto sharpen radius is invalid.");
+      if (!(safeOpacity >= 0 && safeOpacity <= 100)) return failure("AUTO_SHARPEN_INVALID", "Auto sharpen opacity is invalid.");
+      if (blendMode !== "softLight" && blendMode !== "overlay" && blendMode !== "linearLight") return failure("AUTO_SHARPEN_INVALID", "Auto sharpen blend mode is invalid.");
+      targetDocument = app.activeDocument;
+      var targetIdentity = /^psai-layer:([0-9]+):([0-9]+)$/.exec(String(layerName));
+      if (targetIdentity) {
+        var expectedDocument = documentById(targetIdentity[1]);
+        if (!expectedDocument) return failure("AUTO_SHARPEN_LAYER_MISSING", "The imported document is closed.");
+        if (expectedDocument !== targetDocument) return failure("AUTO_SHARPEN_DOCUMENT_INACTIVE", "Activate the imported document before sharpening.");
+        originalLayer = findLayerById(targetDocument, targetIdentity[2]);
+      } else originalLayer = findLayerByName(targetDocument, layerName);
+      if (!originalLayer) return failure("AUTO_SHARPEN_LAYER_MISSING", "The generated Photoshop layer could not be found.");
+
+      if (originalLayer.parent && originalLayer.parent.typename === "LayerSet" &&
+          String(originalLayer.parent.name) === "AI生成图_清晰化") {
+        group = originalLayer.parent;
+        oldSharpenLayer = directLayerByName(group, "AI生成图_锐化", originalLayer);
+      }
+
+      if (isLocal === true || String(isLocal) === "true") {
+        originalSelection = selectionBounds(targetDocument);
+        if (safeContract <= 0 || safeFeather <= 0) return failure("AUTO_SHARPEN_MASK_UNAVAILABLE", "Local auto sharpen requires edge protection.");
+        if (pixels(originalSelection[2]) - pixels(originalSelection[0]) <= safeContract * 2 ||
+            pixels(originalSelection[3]) - pixels(originalSelection[1]) <= safeContract * 2) {
+          return failure("AUTO_SHARPEN_MASK_UNAVAILABLE", "The protected local sharpen selection is too small.");
+        }
+      }
+
+      sharpenLayer = originalLayer.duplicate();
+      sharpenLayer.name = "AI生成图_锐化_处理中";
+      targetDocument.activeLayer = sharpenLayer;
+      try { sharpenLayer.applyHighPass(safeRadius); }
+      catch (highPassError) { raiseHostError("AUTO_SHARPEN_FAILED", "Photoshop could not apply High Pass."); }
+      if (shouldDesaturate) {
+        try { sharpenLayer.desaturate(); }
+        catch (desaturateError) { raiseHostError("AUTO_SHARPEN_FAILED", "Photoshop could not desaturate the sharpen layer."); }
+      }
+      sharpenLayer.blendMode = blendMode === "softLight" ? BlendMode.SOFTLIGHT :
+        (blendMode === "overlay" ? BlendMode.OVERLAY : BlendMode.LINEARLIGHT);
+      sharpenLayer.opacity = safeOpacity;
+
+      if (originalSelection) {
+        try {
+          targetDocument.selection.select([
+            [pixels(originalSelection[0]) + safeContract, pixels(originalSelection[1]) + safeContract],
+            [pixels(originalSelection[2]) - safeContract, pixels(originalSelection[1]) + safeContract],
+            [pixels(originalSelection[2]) - safeContract, pixels(originalSelection[3]) - safeContract],
+            [pixels(originalSelection[0]) + safeContract, pixels(originalSelection[3]) - safeContract]
+          ]);
+          targetDocument.selection.feather(safeFeather);
+          createRevealSelectionMask();
+          maskApplied = true;
+        } catch (maskError) { raiseHostError("AUTO_SHARPEN_MASK_UNAVAILABLE", "Photoshop could not create the protected local sharpen mask."); }
+        finally {
+          try { targetDocument.selection.select([
+            [pixels(originalSelection[0]), pixels(originalSelection[1])],
+            [pixels(originalSelection[2]), pixels(originalSelection[1])],
+            [pixels(originalSelection[2]), pixels(originalSelection[3])],
+            [pixels(originalSelection[0]), pixels(originalSelection[3])]
+          ]); } catch (restoreSelectionError) {}
+        }
+      }
+
+      if (!group) {
+        group = targetDocument.layerSets.add();
+        group.name = "AI生成图_清晰化";
+        groupCreated = true;
+        originalLayer.move(group, ElementPlacement.INSIDE);
+        sharpenLayer.move(group, ElementPlacement.INSIDE);
+      }
+      sharpenLayer.name = "AI生成图_锐化";
+      if (oldSharpenLayer) {
+        try {
+          oldSharpenLayer.remove();
+          oldSharpenLayer = null;
+          replacedExisting = true;
+        } catch (replaceError) {
+          raiseHostError("AUTO_SHARPEN_REPLACE_FAILED", "Photoshop could not replace the previous sharpen layer.");
+        }
+      }
+      targetDocument.activeLayer = sharpenLayer;
+      return success({
+        applied: true,
+        originalLayerName: String(originalLayer.name),
+        sharpenLayerName: String(sharpenLayer.name),
+        groupName: String(group.name),
+        radius: safeRadius,
+        opacity: safeOpacity,
+        blendMode: String(blendMode),
+        suppressColorFringing: shouldDesaturate,
+        replacedExisting: replacedExisting,
+        maskApplied: maskApplied,
+        contract: originalSelection ? safeContract : 0,
+        feather: originalSelection ? safeFeather : 0
+      });
+    } catch (error) {
+      if (originalLayer && groupCreated && group) {
+        try { originalLayer.move(group, ElementPlacement.PLACEBEFORE); } catch (restoreLayerError) {}
+      }
+      if (sharpenLayer) { try { sharpenLayer.remove(); } catch (removeSharpenError) {} }
+      if (groupCreated && group) { try { if (group.layers.length === 0) group.remove(); } catch (removeGroupError) {} }
+      if (targetDocument && originalLayer) { try { targetDocument.activeLayer = originalLayer; } catch (restoreActiveError) {} }
+      return failure(error.psaiCode || "AUTO_SHARPEN_FAILED", error.message || "Photoshop auto sharpen failed.");
     }
   };
 

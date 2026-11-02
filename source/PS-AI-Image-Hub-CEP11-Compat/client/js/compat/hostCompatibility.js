@@ -6,7 +6,7 @@
   Object.assign(root.PSAIImageHubCompat, api);
 }(typeof globalThis !== "undefined" ? globalThis : this, function createHostCompatibility(root) {
   "use strict";
-  var EMPTY_HOST = { hostName: "unknown", hostVersion: "unknown", hostMajor: null, os: "unknown", extensionVersion: "1.0.3" };
+  var EMPTY_HOST = { hostName: "unknown", hostVersion: "unknown", hostMajor: null, os: "unknown", extensionVersion: "1.1.0" };
   var CAPABILITY_NAMES = ["documentAccess", "currentCanvasExport", "currentSelectionExport", "layerImport", "tempDocumentWorkflow", "fileOpen"];
 
   function cloneEmptyHost() {
@@ -42,7 +42,8 @@
 
   function compatibilityProfile(hostInfo) {
     var host = hostInfo || EMPTY_HOST;
-    if (host.hostName !== "PHSP") return host.hostName === "unknown" ? "UNKNOWN_CEP11" : "UNSUPPORTED_HOST";
+    var isPhotoshop = host.hostName === "PHSP" || host.hostName === "PHXS";
+    if (!isPhotoshop) return host.hostName === "unknown" ? "UNKNOWN_CEP11" : "UNSUPPORTED_HOST";
     if (host.hostMajor === 23) return "PS23_CEP11";
     if (host.hostMajor === 24) return "PS24_CEP11";
     if (host.hostMajor === 25) return "PS25_CEP11";

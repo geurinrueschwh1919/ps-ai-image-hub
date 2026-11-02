@@ -44,7 +44,7 @@ test("26 no formal plugin mutation", () => { const source=fs.readFileSync(path.j
 test("27 correct target path", () => assert.match(core.installPaths("C:\\User").compat,/PS-AI-Image-Hub-CEP11-Compat$/));
 test("28 CMD installer package output exists", () => {
   assert.equal(fs.existsSync(path.join(__dirname,"../build/package/payload.zip")),true);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(__dirname,"../build/package/metadata.json"),"utf8").replace(/^\uFEFF/,"")).bundleVersion,"1.0.3");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(__dirname,"../build/package/metadata.json"),"utf8").replace(/^\uFEFF/,"")).bundleVersion,"1.1.0");
   assert.equal(fs.existsSync(path.join(__dirname,"../src/launch-portable.cmd")),true);
 });
 test("29 deterministic runtime hash manifest", () => { const file=path.join(__dirname,"../build/runtime-hashes.json");const a=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");const b=crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");assert.equal(a,b); });

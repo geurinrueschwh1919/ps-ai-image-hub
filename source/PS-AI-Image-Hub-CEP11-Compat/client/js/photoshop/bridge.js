@@ -101,14 +101,25 @@
     getDocumentMetadata() { return this.invoke("getDocumentMetadata"); }
     getSelectionBounds() { return this.invoke("getSelectionBounds"); }
     exportReferenceImage(mode, filePath) { return this.invoke("exportReferenceImage", [mode, filePath]); }
-    importImage(filePath) { return this.invoke("importImage", [filePath]); }
-    importSmartObjectToBounds(filePath, bounds) {
+    importImage(filePath, expectedDocumentId) { return this.invoke("importImage", [filePath, expectedDocumentId === undefined ? null : expectedDocumentId]); }
+    importSmartObjectToBounds(filePath, bounds, expectedDocumentId) {
       var target = bounds || {};
       var left = Number(target.left), top = Number(target.top), width = Number(target.width), height = Number(target.height);
       if (!(isFinite(left) && isFinite(top) && width > 0 && height > 0)) {
         return Promise.reject(new AppError(ErrorCodes.PHOTOSHOP_IMPORT, "Smart Object import requires valid target bounds."));
       }
-      return this.invoke("importSmartObjectToBounds", [filePath, left, top, width, height]);
+      return this.invoke("importSmartObjectToBounds", [filePath, left, top, width, height,
+        expectedDocumentId === undefined ? null : expectedDocumentId]);
+    }
+    applyAutoSharpen(layerName, plan) {
+      var settings = plan || {};
+      var reference = layerName;
+      if (settings.targetDocumentId !== undefined && settings.targetLayerId !== undefined && /^\d+$/.test(String(settings.targetDocumentId)) && /^\d+$/.test(String(settings.targetLayerId))) {
+        reference = "psai-layer:" + settings.targetDocumentId + ":" + settings.targetLayerId;
+      }
+      return this.invoke("applyAutoSharpen", [reference, settings.blendMode, settings.opacity, settings.radius,
+        settings.isLocal === true, settings.contract || 0, settings.feather || 0,
+        settings.suppressColorFringing === true]);
     }
   }
 

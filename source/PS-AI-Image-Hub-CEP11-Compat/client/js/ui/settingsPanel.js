@@ -81,11 +81,17 @@
       this.providerManager = options && options.providerManager;
       this.uiStateStore = options && options.uiStateStore || null;
       this.storageManager = options && options.storageManager || null;
+      this.historyStore = options && options.historyStore || null;
+      this.isReloadBlocked = options && options.isReloadBlocked || function notBlocked() { return false; };
+      this.runtime = options && options.runtime || root;
       this.onProvidersChanged = options && options.onProvidersChanged || function noop() {};
       this.editingId = null;
       this.forgetPersistentKey = false;
       this.tooltipPinned = false;
       this.activeHelpButton = null;
+      this.storageManagerMounted = false;
+      this.storageMutationBusy = false;
+      this.mounted = false;
     }
 
     helpLabel(labelKey, helpKey, fieldId) {
@@ -96,13 +102,15 @@
     }
 
     mount() {
+      if (this.mounted) return;
+      this.mounted = true;
       var grsModelOptions = (root.PSAIImageHubCompat.GRS_MODEL_CATALOG || []).map(function modelOption(model) {
         return '<option value="' + model.modelId + '">' + model.displayName + "</option>";
       }).join("");
       var aliyunModelOptions = (root.PSAIImageHubCompat.ALIYUN_BAILIAN_MODEL_CATALOG || []).map(function modelOption(model) {
         return '<option value="' + model.modelId + '">' + model.displayName + "</option>";
       }).join("");
-      var aliyunRegionOptions = (root.PSAIImageHubCompat.getAliyunBailianSupportedRegions
+      var aliyunRegionOptions = '<option value="">' + this.t("selectRegion") + '</option>' + (root.PSAIImageHubCompat.getAliyunBailianSupportedRegions
         ? root.PSAIImageHubCompat.getAliyunBailianSupportedRegions("qwen-image-3.0")
         : []).map(function regionOption(region) {
         return '<option value="' + region.id + '">' + region.label + "</option>";
@@ -110,12 +118,14 @@
       this.container.innerHTML = `
         <div class="settings-guide"><strong>${this.t("settingsStepsTitle")}</strong><span>${this.t("settingsSteps")}</span><span id="provider-type-guide"></span></div>
         <p class="muted">${this.t("storageHint")}</p>
+        <details id="settings-basic-disclosure" class="provider-section settings-disclosure"><summary>${this.t("basicSettings")}</summary><div class="settings-disclosure-body">
         <label class="field-label" for="settings-provider-list">${this.t("providerList")}</label>
         <select id="settings-provider-list"></select>
         <div class="button-row"><button id="provider-new" type="button">${this.t("newProvider")}</button><button id="provider-delete" type="button">${this.t("deleteProvider")}</button></div>
 
+
         <section class="provider-section basic-section" data-settings-section="basic">
-          <h3>${this.t("basicSettings")}</h3>
+
           <div class="provider-form">
             <label class="provider-field" data-field="providerName" for="provider-name">${this.helpLabel("providerName", "helpProviderName", "provider-name")}<input id="provider-name" type="text" placeholder="${this.t("providerNamePlaceholder")}" aria-describedby="provider-name-description" /></label>
             <label class="provider-field" data-field="providerType" for="provider-type">${this.helpLabel("providerType", "helpProviderType", "provider-type")}<select id="provider-type" aria-describedby="provider-type-description"><option value="openai-compatible">OpenAI-Compatible</option><option value="generic-rest">Generic REST</option><option value="async-task">Async Task API</option></select></label>
@@ -151,8 +161,9 @@
           <p class="muted">Alibaba Cloud Model Studio · ${this.t("aliyunBuiltInHint")}</p>
           <dl><dt>${this.t("providerType")}</dt><dd>Async Task API</dd></dl>
           <div class="provider-form">
+            <label>${this.t("bailianEndpointMode")}<select id="aliyun-endpoint-mode"><option value="shared">${this.t("bailianSharedEndpoint")}</option><option value="dedicated">${this.t("bailianWorkspaceEndpoint")}</option></select></label>
             <label>${this.helpLabel("region", "helpAliyunRegion", "aliyun-region")}<small class="muted">Region</small><select id="aliyun-region" aria-describedby="aliyun-region-description">${aliyunRegionOptions}</select></label>
-            <label>Workspace ID<input id="aliyun-workspace-id" type="text" autocomplete="off" placeholder="Workspace ID" /></label>
+            <label id="aliyun-dedicated-host-field">${this.t("bailianDedicatedApiHost")}<input id="aliyun-dedicated-api-host" type="text" autocomplete="off" placeholder="https://example.cn-beijing.maas.aliyuncs.com" /><small class="muted">${this.t("bailianDedicatedApiHostHint")}</small></label>
             <label>${this.helpLabel("apiKey", "helpApiKey", "aliyun-api-key")}<input id="aliyun-api-key" type="password" placeholder="${this.t("apiKeyPlaceholder")}" autocomplete="off" aria-describedby="aliyun-api-key-description" /><span class="inline-check"><input id="aliyun-remember-key" type="checkbox" /> ${this.t("rememberApiKey")}</span><small class="muted">${this.t("rememberApiKeyHint")}</small><span class="secret-status-row"><span id="aliyun-key-status" class="muted"></span><button id="aliyun-clear-key" class="compact-button" type="button" hidden>${this.t("clearSavedApiKey")}</button></span></label>
             <label>${this.t("defaultModel")}<select id="aliyun-model">${aliyunModelOptions}</select></label>
           </div>
@@ -161,6 +172,9 @@
           <details><summary>${this.t("advancedInfo")}</summary><dl><dt>Endpoint</dt><dd id="aliyun-info-endpoint"></dd><dt>Auth</dt><dd>Bearer Token</dd><dt>Async Header</dt><dd>X-DashScope-Async: enable</dd></dl></details>
         </section>
 
+        <div class="button-row"><button id="provider-test" type="button">${this.t("testConnection")}</button><button id="provider-save" class="secondary-button" type="button">${this.t("save")}</button></div>
+        <div id="provider-message" class="muted"></div>
+        </div></details>
         <section class="provider-section advanced-section" data-settings-section="advanced">
           <button id="advanced-toggle" class="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-fields"><span>${this.t("advancedSettings")}</span><span class="disclosure-mark">▸</span></button>
           <div id="advanced-fields" class="provider-form" hidden>
@@ -173,24 +187,28 @@
           </div>
         </section>
 
-        <div class="button-row"><button id="provider-test" type="button">${this.t("testConnection")}</button><button id="provider-save" class="secondary-button" type="button">${this.t("save")}</button></div>
-        <div id="provider-message" class="muted"></div>
-        <section class="provider-section storage-section">
-          <h3>${this.t("importSettings")}</h3>
+
+
+        <details id="settings-import-disclosure" class="provider-section settings-disclosure"><summary>${this.t("importSettings")}</summary><div class="settings-disclosure-body">
           <label class="inline-check" title="${this.t("matchMainSizeHelp")}"><input id="match-main-size" type="checkbox" /> ${this.t("matchMainSize")}</label>
           <small class="muted">${this.t("matchMainSizeHelp")}</small>
-        </section>
-        <section class="provider-section storage-section">
-          <h3>${this.t("storageAndCache")}</h3>
+        </div></details>
+        <details id="settings-history-disclosure" class="provider-section settings-disclosure"><summary>${this.t("historySettings")}</summary><div class="settings-disclosure-body">
+          <label><span class="field-label">${this.t("historyCapacity")}</span><select id="history-capacity"><option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="500">500</option></select></label>
+          <small class="muted">${this.t("historyCapacityHelp")}</small>
+        </div></details>
+        <details id="settings-storage-disclosure" class="provider-section settings-disclosure"><summary>${this.t("storageAndCache")}</summary><div class="settings-disclosure-body">
           <p class="muted storage-warning">${this.t("localStorageOnlyWarning")}</p>
           <div class="storage-path-row"><span>${this.t("localDataDirectory")}</span><code id="storage-root-path"></code><button id="copy-storage-path" class="compact-button" type="button">${this.t("copyPath")}</button></div>
           <span class="storage-action-heading">${this.t("storageFiles")}</span>
           <div id="storage-usage" class="storage-usage"></div>
-          <div class="storage-actions"><button id="refresh-storage" type="button">${this.t("refreshStorage")}</button><div class="storage-action-group"><span class="storage-action-heading">${this.t("storageImageCacheActions")}</span><button id="clear-temp-cache" type="button">${this.t("clearTemporaryInputs")}</button><button id="clear-recovery-images" type="button">${this.t("clearRecoveryImages")}</button><button id="clear-download-cache" type="button">${this.t("clearDownloadCache")}</button><button id="clear-history-images" type="button">${this.t("clearHistoryImages")}</button></div><div class="storage-action-group storage-danger-group"><span class="storage-action-heading">${this.t("storageDangerActions")}</span><button id="clear-all-image-cache" class="danger-button" type="button">${this.t("clearAllImageCache")}</button><button id="clear-recovery-records" class="danger-button" type="button">${this.t("clearRecoveryRecords")}</button></div></div>
+          <div class="storage-actions"><button id="refresh-storage" type="button">${this.t("refreshStorage")}</button><button id="reload-plugin-ui" class="reload-plugin-button" type="button">${this.t("reloadPluginUi")}</button><small class="muted">${this.t("reloadPluginUiHelp")}</small><div class="storage-action-group"><span class="storage-action-heading">${this.t("storageImageCacheActions")}</span><button id="clear-temp-cache" type="button">${this.t("clearTemporaryInputs")}</button><button id="clear-recovery-images" type="button">${this.t("clearRecoveryImages")}</button><button id="clear-download-cache" type="button">${this.t("clearDownloadCache")}</button><button id="clear-history-images" type="button">${this.t("clearHistoryImages")}</button></div><div class="storage-action-group storage-danger-group"><span class="storage-action-heading">${this.t("storageDangerActions")}</span><button id="clear-all-image-cache" class="danger-button" type="button">${this.t("clearAllImageCache")}</button><button id="clear-recovery-records" class="danger-button" type="button">${this.t("clearRecoveryRecords")}</button></div></div>
           <div id="storage-message" class="muted"></div>
-        </section>
+        </div></details>
+        <footer class="settings-version">V1.1.0</footer>
         <div id="provider-tooltip" class="help-tooltip" role="tooltip" hidden></div>`;
 
+      this.basicDisclosure = this.container.querySelector("#settings-basic-disclosure");
       if (this.toggleButton) this.toggleButton.addEventListener("click", () => this.toggle());
       this.list = this.container.querySelector("#settings-provider-list");
       this.message = this.container.querySelector("#provider-message");
@@ -206,6 +224,10 @@
       this.container.querySelector("#provider-save").addEventListener("click", () => this.saveProvider());
       this.container.querySelector("#provider-test").addEventListener("click", () => this.testProvider());
       this.list.addEventListener("change", () => this.loadSelected());
+      ["input", "change"].forEach((type) => this.container.addEventListener(type, (event) => {
+        var id = event.target && event.target.id || "";
+        if (/^(provider-|grs-|aliyun-|model-|settings-provider-list$)/.test(id)) this.clearSavedMessage();
+      }));
       this.field("provider-type").addEventListener("change", () => this.handleProviderTypeChange());
       this.field("provider-auth-type").addEventListener("change", () => this.syncFieldVisibility());
       this.field("model-add").addEventListener("click", () => this.addManagedModel());
@@ -213,9 +235,11 @@
       this.field("grs-custom-base-url").addEventListener("input", () => this.syncGrsFields());
       this.field("grs-model").addEventListener("change", () => { this.syncGrsFields(); if (this.uiStateStore) this.uiStateStore.setModel("grs", this.field("grs-model").value, "settings"); });
       this.field("grs-refresh-credits").addEventListener("click", () => this.refreshGrsCredits());
-      this.field("aliyun-region").addEventListener("change", () => this.syncAliyunFields());
-      this.field("aliyun-workspace-id").addEventListener("input", () => this.syncAliyunFields());
+      this.field("aliyun-endpoint-mode").addEventListener("change", () => { this.markAliyunDirty(); this.syncAliyunFields(); });
+      this.field("aliyun-region").addEventListener("change", () => { this.markAliyunDirty(); this.syncAliyunFields(); });
+      this.field("aliyun-dedicated-api-host").addEventListener("input", () => { this.markAliyunDirty(); this.syncAliyunFields(); });
       this.field("aliyun-model").addEventListener("change", () => {
+        this.markAliyunDirty();
         this.syncAliyunFields({ notifyFallback: true });
         if (this.uiStateStore) this.uiStateStore.setModel("aliyun-bailian", this.field("aliyun-model").value, "settings");
       });
@@ -231,6 +255,9 @@
       this.advancedToggle.addEventListener("click", () => this.toggleAdvanced());
       this.field("match-main-size").checked = Boolean(this.uiStateStore && this.uiStateStore.getMatchMainSize());
       this.field("match-main-size").addEventListener("change", () => { if (this.uiStateStore) this.uiStateStore.setMatchMainSize(this.field("match-main-size").checked, "settings"); });
+      this.field("history-capacity").value = String(this.historyStore && this.historyStore.getMaxHistoryCount ? this.historyStore.getMaxHistoryCount() : 100);
+      this.field("history-capacity").disabled = !this.historyStore;
+      this.field("history-capacity").addEventListener("change", () => { if (this.historyStore) this.historyStore.setMaxHistoryCount(Number(this.field("history-capacity").value)); });
       this.mountStorageManager();
       if (this.uiStateStore) this.unsubscribeUiState = this.uiStateStore.subscribe((change) => {
         if (change.type === "model" && change.providerId === "grs" && this.field("grs-model") && this.field("grs-model").value !== change.modelId) {
@@ -244,6 +271,7 @@
       this.mountTooltips();
       this.refreshList();
       this.newProvider();
+      if (this.basicDisclosure) this.basicDisclosure.open = false;
       this.sync();
       root.PSAIImageHubCompat.enhanceSelects(this.container);
     }
@@ -253,6 +281,10 @@
     field(id) { return this.container.querySelector("#" + id); }
 
     mountStorageManager() {
+      if (this.storageManagerMounted) { this.syncReloadButton(); return; }
+      this.storageManagerMounted = true;
+      this.field("reload-plugin-ui").addEventListener("click", () => this.reloadPluginUi());
+      this.syncReloadButton();
       if (!this.storageManager) { this.field("storage-usage").textContent = this.t("storageUnavailable"); return; }
       this.field("copy-storage-path").addEventListener("click", () => this.copyStoragePath());
       this.field("refresh-storage").addEventListener("click", () => this.refreshStorageUsage());
@@ -266,6 +298,30 @@
       this.field("clear-all-image-cache").addEventListener("click", () => this.clearStorage("all", "confirmClearAllImageCache"));
       this.field("clear-recovery-records").addEventListener("click", () => this.clearStorage("records", "confirmClearRecoveryRecords"));
       this.refreshStorageUsage();
+    }
+
+    reloadIsBlocked() {
+      try { return this.storageMutationBusy === true || this.isReloadBlocked() === true; }
+      catch (error) { return true; }
+    }
+
+    syncReloadButton() {
+      var button = this.field("reload-plugin-ui");
+      if (!button) return false;
+      button.disabled = this.reloadIsBlocked();
+      return !button.disabled;
+    }
+
+    reloadPluginUi() {
+      if (this.reloadIsBlocked()) {
+        this.field("storage-message").textContent = this.t("reloadPluginBusy");
+        this.syncReloadButton();
+        return false;
+      }
+      if (typeof this.runtime.confirm !== "function" || !this.runtime.confirm(this.t("confirmReloadPluginUi"))) return false;
+      if (!this.runtime.location || typeof this.runtime.location.reload !== "function") return false;
+      this.runtime.location.reload();
+      return true;
     }
 
     async copyStoragePath() {
@@ -294,12 +350,15 @@
 
     async clearStorage(target, confirmationKey) {
       if (root.confirm && !root.confirm(this.t(confirmationKey))) return;
+      this.storageMutationBusy = true;
+      this.syncReloadButton();
       try {
         if (target === "all") this.storageManager.clearAllImages();
         else if (target === "records") this.storageManager.clearRecoveryRecords();
         else this.storageManager.clear(target);
         this.field("storage-message").textContent = this.t("storageClearDone"); this.refreshStorageUsage();
       } catch (error) { this.field("storage-message").textContent = this.t("storageClearFailed"); }
+      finally { this.storageMutationBusy = false; this.syncReloadButton(); }
     }
 
     markKeyEdited(fieldId) {
@@ -407,6 +466,7 @@
       var supportedRegions = root.PSAIImageHubCompat.getAliyunBailianSupportedRegions(modelId);
       var selectedRegion = root.PSAIImageHubCompat.resolveAliyunBailianSupportedRegion(modelId, previousRegion);
       regionSelect.innerHTML = "";
+      var emptyOption = document.createElement("option"); emptyOption.value = ""; emptyOption.textContent = this.t("selectRegion"); regionSelect.appendChild(emptyOption);
       supportedRegions.forEach(function addRegion(region) {
         var option = document.createElement("option");
         option.value = region.id;
@@ -419,12 +479,23 @@
         this.message.textContent = this.t("aliyunRegionFallback", { region: selected && selected.label || selectedRegion });
         this.message.className = "status-completed";
       }
-      var baseUrl = root.PSAIImageHubCompat.resolveAliyunBailianBaseUrl(selectedRegion, this.field("aliyun-workspace-id").value);
+      var mode = this.field("aliyun-endpoint-mode").value;
+      var hostField = this.field("aliyun-dedicated-api-host");
+      hostField.disabled = mode === "shared";
+      this.field("aliyun-dedicated-host-field").hidden = mode === "shared";
+      var baseUrl = root.PSAIImageHubCompat.resolveAliyunBailianBaseUrl(selectedRegion, hostField.value, mode);
       this.field("aliyun-info-endpoint").textContent = baseUrl
         ? baseUrl + "/api/v1/services/aigc/image-generation/generation"
         : this.t("workspaceRequiredForEndpoint");
       root.PSAIImageHubCompat.refreshEnhancedSelect(regionSelect);
       root.PSAIImageHubCompat.refreshEnhancedSelect(this.field("aliyun-model"));
+      root.PSAIImageHubCompat.refreshEnhancedSelect(this.field("aliyun-endpoint-mode"));
+    }
+
+    markAliyunDirty() {
+      if (!this.isAliyunMode) return;
+      this.message.textContent = this.t("aliyunConfigUnsaved");
+      this.message.className = "status-warning";
     }
 
     handleProviderTypeChange() {
@@ -495,6 +566,7 @@
     }
 
     newProvider() {
+      if (this.basicDisclosure) this.basicDisclosure.open = true;
       this.setGrsMode(false);
       this.list.selectedIndex = -1;
       this.editingId = root.PSAIImageHubCompat.createProviderId();
@@ -516,6 +588,7 @@
     }
 
     loadSelected() {
+      if (this.basicDisclosure) this.basicDisclosure.open = true;
       var config = this.providerManager.getProviderConfig(this.list.value); if (!config) return;
       if (config.id === "grs" || config.type === "grs") { this.loadGrs(config); return; }
       if (config.id === "aliyun-bailian" || config.type === "aliyun-bailian") { this.loadAliyun(config); return; }
@@ -605,24 +678,31 @@
       this.setBuiltInMode("aliyun-bailian");
       this.editingId = "aliyun-bailian";
       this.message.textContent = "";
-      this.field("aliyun-workspace-id").value = config.workspaceId || "";
+      this.field("aliyun-endpoint-mode").value = config.endpointMode === "shared" ? "shared" : "dedicated";
+      this.field("aliyun-dedicated-api-host").value = config.dedicatedApiHost || "";
       this.displaySecretStatus("aliyun-bailian", "aliyun");
       this.field("aliyun-model").value = this.uiStateStore && this.uiStateStore.getModel("aliyun-bailian") || config.modelId || "qwen-image-3.0";
-      this.field("aliyun-region").value = config.region || "cn-beijing";
-      this.syncAliyunFields({ notifyFallback: true, preferredRegion: config.region || "cn-beijing" });
+      this.field("aliyun-region").value = config.region || "";
+      this.syncAliyunFields({ notifyFallback: true, preferredRegion: config.region || "" });
     }
 
     collectAliyunConfig() {
       return root.PSAIImageHubCompat.normalizeAliyunBailianConfig({
+        endpointMode: this.field("aliyun-endpoint-mode").value,
         region: this.field("aliyun-region").value,
-        workspaceId: this.field("aliyun-workspace-id").value,
+        dedicatedApiHost: this.field("aliyun-dedicated-api-host").value,
         modelId: this.field("aliyun-model").value
       });
     }
 
     validateAliyunForUi(config) {
       if (!config.region) return "errorBailianRegionRequired";
-      if (!config.workspaceId) return "errorBailianWorkspaceRequired";
+      if (config.endpointMode === "dedicated") {
+        if (!config.dedicatedApiHost) return "errorBailianWorkspaceRequired";
+        var parsedHost = root.PSAIImageHubCompat.parseAliyunDedicatedApiHost(config.dedicatedApiHost);
+        if (!parsedHost.valid) return "errorBailianWorkspaceFormat";
+        if (parsedHost.region !== config.region) return "errorBailianRegionMismatch";
+      }
       var keyState = this.field("aliyun-api-key").getAttribute("data-key-state");
       var keyStatus = this.providerManager && typeof this.providerManager.getApiKeyStatus === "function"
         ? this.providerManager.getApiKeyStatus("aliyun-bailian") : { hasSecret: false };
@@ -642,8 +722,24 @@
       return getConfigValidationKey(config, Boolean(this.field("provider-api-key").value || existing));
     }
 
-    showError(error) { this.message.textContent = root.PSAIImageHubCompat.toUserMessage(error, this.t); this.message.className = "status-failed"; }
-    showValidationError(key) { this.message.textContent = this.t(key); this.message.className = "status-failed"; }
+    clearSavedMessage() {
+      if (!this.message || this.message.className !== "status-completed") return;
+      if (this.savedMessageTimer) root.clearTimeout(this.savedMessageTimer);
+      this.savedMessageTimer = null; this.message.textContent = ""; this.message.className = "muted";
+    }
+    showSavedMessage(key) {
+      if (this.savedMessageTimer) root.clearTimeout(this.savedMessageTimer);
+      var message = this.message, text = this.t(key);
+      message.textContent = text; message.className = "status-completed";
+      this.savedMessageTimer = root.setTimeout(() => {
+        this.savedMessageTimer = null;
+        if (message.className === "status-completed" && message.textContent === text) {
+          message.textContent = ""; message.className = "muted";
+        }
+      }, 4000);
+    }
+    showError(error) { if (this.basicDisclosure) this.basicDisclosure.open = true; this.message.textContent = root.PSAIImageHubCompat.toUserMessage(error, this.t); this.message.className = "status-failed"; }
+    showValidationError(key) { if (this.basicDisclosure) this.basicDisclosure.open = true; this.message.textContent = this.t(key); this.message.className = "status-failed"; }
 
     saveProvider() {
       try {
@@ -652,17 +748,17 @@
           var aliyunValidationKey = this.validateAliyunForUi(aliyunConfig);
           if (aliyunValidationKey) { this.showValidationError(aliyunValidationKey); return; }
           var aliyunProvider = this.providerManager.saveProviderConfig(aliyunConfig, this.field("aliyun-api-key").value, { remember: this.field("aliyun-remember-key").checked, keyAction: this.field("aliyun-api-key").getAttribute("data-key-state"), forgetPersistent: this.forgetPersistentKey });
-          this.refreshList("aliyun-bailian"); this.onProvidersChanged("aliyun-bailian"); this.displaySecretStatus("aliyun-bailian", "aliyun"); this.message.textContent = this.t("apiServiceSaved"); this.message.className = "status-completed"; return;
+          this.refreshList("aliyun-bailian"); this.onProvidersChanged("aliyun-bailian"); this.displaySecretStatus("aliyun-bailian", "aliyun"); this.showSavedMessage("aliyunConfigSaved"); return;
         }
         if (this.isGrsMode) {
           var grsProvider = this.providerManager.saveProviderConfig(this.collectGrsConfig(), this.field("grs-api-key").value, { remember: this.field("grs-remember-key").checked, keyAction: this.field("grs-api-key").getAttribute("data-key-state"), forgetPersistent: this.forgetPersistentKey });
-          this.refreshList("grs"); this.onProvidersChanged("grs"); this.displaySecretStatus("grs", "grs"); this.message.textContent = this.t("apiServiceSaved"); this.message.className = "status-completed"; return;
+          this.refreshList("grs"); this.onProvidersChanged("grs"); this.displaySecretStatus("grs", "grs"); this.showSavedMessage("apiServiceSaved"); return;
         }
         var config = this.collectConfig();
         var validationKey = this.validateConfigForUi(config);
         if (validationKey) { this.showValidationError(validationKey); return; }
         var provider = this.providerManager.saveProviderConfig(config, this.field("provider-api-key").value, { remember: this.field("provider-remember-key").checked, keyAction: this.field("provider-api-key").getAttribute("data-key-state"), forgetPersistent: this.forgetPersistentKey });
-        this.refreshList(provider.id); this.onProvidersChanged(provider.id); this.displaySecretStatus(provider.id, "provider"); this.message.textContent = this.t("apiServiceSaved"); this.message.className = "status-completed";
+        this.refreshList(provider.id); this.onProvidersChanged(provider.id); this.displaySecretStatus(provider.id, "provider"); this.showSavedMessage("apiServiceSaved");
       } catch (error) { this.showError(error); }
     }
 

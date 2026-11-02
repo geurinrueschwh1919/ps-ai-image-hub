@@ -15,16 +15,42 @@
   var AppError = errors.AppError;
   var ErrorCodes = errors.ErrorCodes;
 
-  function maskedWorkspace(value) {
-    var text = String(value || "");
-    if (text.length <= 8) return text ? text.slice(0, 2) + "…" : "";
-    return text.slice(0, 4) + "…" + text.slice(-4);
+  function shortFingerprint(value) {
+    var text = String(value || ""), hash = 2166136261, index;
+    for (index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return text ? ("00000000" + (hash >>> 0).toString(16)).slice(-8) : "none";
   }
 
-  function maskedEndpoint(value, workspaceId) {
-    var endpoint = String(value || "");
-    var workspace = String(workspaceId || "");
-    return workspace ? endpoint.split(workspace).join(maskedWorkspace(workspace)) : endpoint;
+  function originOf(value) {
+    var match = String(value || "").match(/^(https:\/\/[^/]+)/i);
+    return match ? match[1].toLowerCase() : "";
+  }
+
+  function hostType(endpointMode, region) {
+    if (endpointMode === "shared") return region === "cn-beijing" ? "shared-beijing"
+      : region === "ap-southeast-1" ? "shared-singapore" : "shared-unsupported";
+    return "workspace-dedicated";
+  }
+
+  function mapBailianServiceError(error) {
+    if (!(error instanceof AppError)) return error;
+    var details = error.details || {};
+    var serviceCode = String(details.serviceCode || "");
+    var message = String(details.serviceMessage || error.message || "");
+    if (/workspace endpoint is invalid/i.test(message)) return new AppError(ErrorCodes.BAILIAN_WORKSPACE_ENDPOINT_INVALID,
+      "The Alibaba Model Studio dedicated endpoint is invalid.", details);
+    if (/InvalidApiKey/i.test(serviceCode) || /invalid api[- ]?key/i.test(message)) return new AppError(ErrorCodes.AUTH_ERROR,
+      "Alibaba Model Studio rejected the API key.", details);
+    if (/ModelNotFound/i.test(serviceCode) || /model.+not found/i.test(message)) return new AppError(ErrorCodes.MODEL_REQUIRED,
+      "Alibaba Model Studio rejected the Model ID.", details);
+    if (/region/i.test(message) && /mismatch|different|invalid/i.test(message)) return new AppError(ErrorCodes.BAILIAN_REGION_MISMATCH,
+      "Alibaba Model Studio region does not match the configured API host.", details);
+    if (/InvalidParameter/i.test(serviceCode)) return new AppError(ErrorCodes.INVALID_PROVIDER_CONFIG,
+      "Alibaba Model Studio rejected the request parameters.", details);
+    return error;
   }
 
   class AliyunBailianProvider extends asyncProvider.AsyncTaskProvider {
@@ -73,11 +99,20 @@
       if (!definitionValidation.valid) issues = issues.concat(definitionValidation.errors);
       if (!this.config.region) { issues.push("Alibaba Cloud Model Studio requires a Region."); code = ErrorCodes.BAILIAN_REGION_REQUIRED; }
       else if (!catalog.getAliyunBailianRegion(this.config.region)) issues.push("Bailian region is unsupported.");
-      if (!this.config.workspaceId) {
-        issues.push("Alibaba Cloud Model Studio requires a Workspace ID.");
+      if (this.config.endpointMode === "dedicated" && !this.config.dedicatedApiHost) {
+        issues.push("Alibaba Cloud Model Studio requires a dedicated API Host.");
         if (code === ErrorCodes.INVALID_PROVIDER_CONFIG) code = ErrorCodes.BAILIAN_WORKSPACE_REQUIRED;
       }
-      else if (!catalog.isSafeAliyunWorkspaceId(this.config.workspaceId)) issues.push("Workspace ID cannot be used safely in the regional host name.");
+      else if (this.config.endpointMode === "dedicated") {
+        var parsedHost = catalog.parseAliyunDedicatedApiHost(this.config.dedicatedApiHost);
+        if (!parsedHost.valid) {
+          issues.push("Alibaba Cloud Model Studio dedicated API Host is invalid.");
+          if (code === ErrorCodes.INVALID_PROVIDER_CONFIG) code = ErrorCodes.BAILIAN_WORKSPACE_FORMAT;
+        } else if (parsedHost.region !== this.config.region) {
+          issues.push("Alibaba Cloud Model Studio dedicated API Host region does not match the selected Region.");
+          if (code === ErrorCodes.INVALID_PROVIDER_CONFIG) code = ErrorCodes.BAILIAN_REGION_MISMATCH;
+        }
+      }
       if (!this.apiKey()) {
         issues.push("Alibaba Cloud Model Studio requires an API Key.");
         if (code === ErrorCodes.INVALID_PROVIDER_CONFIG) code = ErrorCodes.BAILIAN_API_KEY_REQUIRED;
@@ -109,16 +144,38 @@
 
     async submit(request, context) {
       this.assertSubmitRegionSupported(request);
-      return super.submit(request, context);
+      this.assertSubmitConfiguration(request);
+      try { return await super.submit(request, context); }
+      catch (error) { throw mapBailianServiceError(error); }
+    }
+
+    assertSubmitConfiguration(request) {
+      var validation = this.validateConfig();
+      if (!validation.valid) throw new AppError(validation.code || ErrorCodes.INVALID_PROVIDER_CONFIG,
+        validation.errors[0] || "Alibaba Model Studio configuration is invalid.");
+      var endpoint = this.endpointContext(request, null);
+      var submitUrl = catalog.buildBailianSubmitUrl(endpoint.dedicatedApiHost, endpoint.region, endpoint.endpointMode);
+      var expectedOrigin = catalog.resolveAliyunBailianBaseUrl(endpoint.region, endpoint.dedicatedApiHost, endpoint.endpointMode);
+      if (!submitUrl || !expectedOrigin || originOf(submitUrl) !== originOf(expectedOrigin)) {
+        throw new AppError(ErrorCodes.INVALID_PROVIDER_CONFIG, "Alibaba Model Studio endpoint could not be resolved safely.");
+      }
+      if (endpoint.endpointMode === "shared" && /\.maas\.aliyuncs\.com$/i.test(originOf(submitUrl))) {
+        throw new AppError(ErrorCodes.INVALID_PROVIDER_CONFIG, "Shared mode resolved to a dedicated host.");
+      }
+      return endpoint;
     }
 
     endpointContext(request, task) {
       var requestMetadata = request && request.providerMetadata || {};
       var saved = task && task.requestConfiguration || {};
-      return {
-        region: String(saved.region || requestMetadata.region || this.config.region || ""),
-        workspaceId: String(saved.workspaceId || requestMetadata.workspaceId || this.config.workspaceId || "")
-      };
+      var currentRevision = Math.max(0, Math.floor(Number(this.config.providerConfigRevision) || 0));
+      var metadataRevision = Math.max(0, Math.floor(Number(requestMetadata.providerConfigRevision) || 0));
+      var live = !task && requestMetadata.providerConfigRevision !== undefined && metadataRevision === currentRevision
+        ? requestMetadata : this.config;
+      return { region: String(task ? saved.region || this.config.region || "" : live.region || ""),
+        dedicatedApiHost: String(task ? saved.dedicatedApiHost || this.config.dedicatedApiHost || "" : live.dedicatedApiHost || ""),
+        endpointMode: catalog.normalizeAliyunBailianEndpointMode(task ? saved.endpointMode || this.config.endpointMode : live.endpointMode),
+        providerConfigRevision: task ? Math.max(0, Math.floor(Number(saved.providerConfigRevision) || currentRevision)) : currentRevision };
     }
 
     buildHttpRequest(section, request, task, context) {
@@ -126,30 +183,34 @@
       var endpointContext = this.endpointContext(request, task);
       var isSubmit = section === this.definition.submit;
       var isPoll = section === this.definition.poll;
-      if (isSubmit) http.url = catalog.buildBailianSubmitUrl(endpointContext.workspaceId, endpointContext.region);
-      else if (isPoll) http.url = task && task.pollUrl || catalog.buildBailianPollUrl(endpointContext.workspaceId, endpointContext.region, task && task.id);
-      var submitEndpoint = catalog.buildBailianSubmitUrl(endpointContext.workspaceId, endpointContext.region);
+      if (isSubmit) http.url = catalog.buildBailianSubmitUrl(endpointContext.dedicatedApiHost, endpointContext.region, endpointContext.endpointMode);
+      else if (isPoll) http.url = task && task.pollUrl || catalog.buildBailianPollUrl(endpointContext.dedicatedApiHost, endpointContext.region, task && task.id, endpointContext.endpointMode);
+      var submitEndpoint = catalog.buildBailianSubmitUrl(endpointContext.dedicatedApiHost, endpointContext.region, endpointContext.endpointMode);
       var pollEndpoint = task && task.id
-        ? catalog.buildBailianPollUrl(endpointContext.workspaceId, endpointContext.region, task.id)
-        : catalog.resolveAliyunBailianBaseUrl(endpointContext.region, endpointContext.workspaceId) + "/api/v1/tasks/{taskId}";
-      var safeSubmitEndpoint = maskedEndpoint(submitEndpoint, endpointContext.workspaceId);
-      var safePollEndpoint = maskedEndpoint(pollEndpoint, endpointContext.workspaceId);
+        ? catalog.buildBailianPollUrl(endpointContext.dedicatedApiHost, endpointContext.region, task.id, endpointContext.endpointMode)
+        : catalog.resolveAliyunBailianBaseUrl(endpointContext.region, endpointContext.dedicatedApiHost, endpointContext.endpointMode) + "/api/v1/tasks/{taskId}";
+      var origin = originOf(submitEndpoint);
       http.diagnostics = Object.assign({}, http.diagnostics || {}, {
         provider: this.id,
         model: request && request.modelId || task && task.modelId || this.config.modelId,
-        workspaceId: maskedWorkspace(endpointContext.workspaceId),
         region: endpointContext.region,
-        submitEndpoint: safeSubmitEndpoint,
-        pollEndpoint: safePollEndpoint
+        endpointMode: endpointContext.endpointMode,
+        hostType: hostType(endpointContext.endpointMode, endpointContext.region),
+        apiHostFingerprint: shortFingerprint(origin),
+        providerConfigRevision: endpointContext.providerConfigRevision,
+        submitOriginFingerprint: shortFingerprint(originOf(submitEndpoint)),
+        pollOriginFingerprint: shortFingerprint(originOf(pollEndpoint)),
+        endpoint: this.definition.submit.endpoint
       });
       logging.logger.info("BAILIAN_REQUEST_CONFIGURED", {
         stage: isSubmit ? "submit" : isPoll ? "polling" : "other",
         provider: this.id,
         model: http.diagnostics.model,
-        workspaceId: http.diagnostics.workspaceId,
         region: endpointContext.region,
-        submitEndpoint: safeSubmitEndpoint,
-        pollEndpoint: safePollEndpoint
+        endpointMode: endpointContext.endpointMode,
+        hostType: http.diagnostics.hostType,
+        apiHostFingerprint: http.diagnostics.apiHostFingerprint,
+        providerConfigRevision: endpointContext.providerConfigRevision
       });
       return http;
     }
@@ -157,10 +218,12 @@
     createTask(submitResponse, request) {
       var task = super.createTask(submitResponse, request);
       var endpointContext = this.endpointContext(request, null);
-      task.pollUrl = catalog.buildBailianPollUrl(endpointContext.workspaceId, endpointContext.region, task.id);
+      task.pollUrl = catalog.buildBailianPollUrl(endpointContext.dedicatedApiHost, endpointContext.region, task.id, endpointContext.endpointMode);
       task.requestConfiguration = Object.assign({}, task.requestConfiguration || {}, {
         region: endpointContext.region,
-        workspaceId: endpointContext.workspaceId,
+        dedicatedApiHost: endpointContext.dedicatedApiHost,
+        endpointMode: endpointContext.endpointMode,
+        providerConfigRevision: endpointContext.providerConfigRevision,
         negativePrompt: String(request && request.negativePrompt || ""),
         promptExtend: request && request.promptExtend !== false,
         promptExtendMode: String(request && request.promptExtendMode || "direct"),
@@ -182,7 +245,8 @@
     }
 
     getHistoryMetadata() {
-      return { providerDisplayName: this.displayName, region: this.config.region, workspaceId: this.config.workspaceId };
+      return { providerDisplayName: this.displayName, region: this.config.region, endpointMode: this.config.endpointMode,
+        dedicatedApiHost: this.config.dedicatedApiHost, providerConfigRevision: this.config.providerConfigRevision };
     }
 
     getReadOnlyInfo() {
@@ -216,7 +280,7 @@
               endpoint: this.definition.poll.endpointTemplate
             }, error.details || {}));
         }
-        throw error;
+        throw mapBailianServiceError(error);
       }
     }
   }

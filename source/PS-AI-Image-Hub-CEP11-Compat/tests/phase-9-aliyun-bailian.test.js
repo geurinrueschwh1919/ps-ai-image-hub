@@ -33,7 +33,8 @@ function memoryStorage() {
 function taskStore(storage) { return new AsyncTaskStore({ storage: storage || memoryStorage() }); }
 function secretStore(value) { return { get(name) { assert.equal(name, "provider:aliyun-bailian:apiKey"); return value || null; } }; }
 function config(overrides) {
-  return Object.assign({ region: "cn-beijing", workspaceId: "workspace-test", modelId: "qwen-image-3.0" }, overrides || {});
+  return Object.assign({ region: "cn-beijing", endpointMode: "dedicated",
+    dedicatedApiHost: "https://workspace-test.cn-beijing.maas.aliyuncs.com", modelId: "qwen-image-3.0" }, overrides || {});
 }
 function providerWith(responses, overrides) {
   const settings = overrides || {};
@@ -80,20 +81,20 @@ test("Provider model selection is stored independently inside Bailian config", (
   assert.equal(new MockProvider().getModels()[0].id, "mock-image-v1");
 });
 
-test("Beijing Workspace endpoint construction trims config and rejects unsafe host labels", () => {
-  const normalized = catalog.normalizeAliyunBailianConfig({ workspaceId: "  workspace-test  ", region: "cn-beijing" });
-  assert.equal(normalized.workspaceId, "workspace-test");
+test("Beijing dedicated endpoint construction trims full API Host and rejects unsafe URLs", () => {
+  const normalized = catalog.normalizeAliyunBailianConfig({ dedicatedApiHost: "  https://workspace-test.cn-beijing.maas.aliyuncs.com/api/v1  ", region: "cn-beijing" });
+  assert.equal(normalized.dedicatedApiHost, "https://workspace-test.cn-beijing.maas.aliyuncs.com");
   assert.equal(normalized.baseUrl, "https://workspace-test.cn-beijing.maas.aliyuncs.com");
   assert.equal(catalog.resolveAliyunBailianBaseUrl("cn-beijing", "bad/path"), "");
 });
 
-test("Provider validation requires Workspace ID and API Key separately", () => {
-  assert.equal(providerWith([], { config: { workspaceId: "" } }).provider.validateConfig().valid, false);
+test("Provider validation requires dedicated API Host and API Key separately", () => {
+  assert.equal(providerWith([], { config: { dedicatedApiHost: "" } }).provider.validateConfig().valid, false);
   const missingKey = providerWith([], { apiKey: null }).provider.validateConfig();
   assert.equal(missingKey.valid, false); assert.equal(missingKey.code, ErrorCodes.BAILIAN_API_KEY_REQUIRED);
 });
 
-test("API Key uses existing SecretStore semantics while Workspace remains normal config", () => {
+test("API Key uses existing SecretStore semantics while dedicated Host remains normal config", () => {
   const session = memoryStorage(); const persistenceValues = new Map();
   const persistence = { set(key, value) { persistenceValues.set(key, value); }, get(key) { return persistenceValues.get(key) || null; }, remove(key) { persistenceValues.delete(key); }, has(key) { return persistenceValues.has(key); } };
   const secrets = new SecretStore({ storage: session, persistence });
@@ -290,20 +291,20 @@ test("Bailian temporary result URL is downloaded into local History storage", as
     apiClient: { async requestArrayBuffer(url) { downloads += 1; assert.equal(url, "https://example.com/result.png"); return { bytes: buffer }; } },
     photoshopBridge: { resolveExtensionAsset(value) { return value; } } });
   const identity = { executionId: "exec-history", historyId: "history-bailian", taskId: "test-task-001" };
-  history.beginExecution(Object.assign(request(), { providerDisplayName: "阿里云百炼", modelDisplayName: "Qwen Image 3.0", providerMetadata: { region: "cn-beijing", workspaceId: "workspace-test" } }), identity);
-  const entry = await history.recordSuccess(Object.assign(request(), { providerDisplayName: "阿里云百炼", modelDisplayName: "Qwen Image 3.0", providerMetadata: { region: "cn-beijing", workspaceId: "workspace-test" } }), {
+  history.beginExecution(Object.assign(request(), { providerDisplayName: "阿里云百炼", modelDisplayName: "Qwen Image 3.0", providerMetadata: { region: "cn-beijing", endpointMode: "dedicated", dedicatedApiHost: "https://workspace-test.cn-beijing.maas.aliyuncs.com" } }), identity);
+  const entry = await history.recordSuccess(Object.assign(request(), { providerDisplayName: "阿里云百炼", modelDisplayName: "Qwen Image 3.0", providerMetadata: { region: "cn-beijing", endpointMode: "dedicated", dedicatedApiHost: "https://workspace-test.cn-beijing.maas.aliyuncs.com" } }), {
     providerId: "aliyun-bailian", modelId: "qwen-image-3.0", taskId: "test-task-001", importState: "notImported",
     images: [{ importSource: { type: "url", url: "https://example.com/result.png" } }]
   }, identity);
   assert.equal(downloads, 1); assert.ok(entry.localResultFile); assert.equal(cepFs.files.has(entry.localResultFile), true);
-  assert.equal(entry.providerDisplayName, "阿里云百炼"); assert.equal(entry.region, "cn-beijing"); assert.equal(entry.workspaceId, "workspace-test");
+  assert.equal(entry.providerDisplayName, "阿里云百炼"); assert.equal(entry.region, "cn-beijing"); assert.equal(entry.endpointMode, "dedicated");
   assert.equal(JSON.stringify(entry).includes("test-api-key"), false);
 });
 
 test("Settings and Generate UI expose Bailian fields and safe configuration-only connection test", () => {
   const settings = fs.readFileSync(path.resolve(__dirname, "../client/js/ui/settingsPanel.js"), "utf8");
   const main = fs.readFileSync(path.resolve(__dirname, "../client/js/ui/mainPanel.js"), "utf8");
-  assert.match(settings, /id="aliyun-region"/); assert.match(settings, /id="aliyun-workspace-id"/); assert.match(settings, /this\.testButton\.hidden = false/);
+  assert.match(settings, /id="aliyun-region"/); assert.match(settings, /id="aliyun-dedicated-api-host"/); assert.match(settings, /this\.testButton\.hidden = false/);
   assert.match(settings, /configValidationPassedNoFreeEndpoint/);
   assert.match(main, /id="negative-prompt"/); assert.match(main, /id="prompt-extend"/); assert.match(main, /id="enable-thinking"/); assert.match(main, /id="seed"/);
 });

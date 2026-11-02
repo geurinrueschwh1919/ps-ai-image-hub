@@ -33,9 +33,10 @@
     if (textarea) textarea.value = applied.text;
     return applied;
   }
-  function saveDialogPath(result) {
-    if (!result || result.err !== 0 || !result.data) return "";
-    return String(Array.isArray(result.data) ? result.data[0] || "" : result.data || "");
+  function syncSliderFill(input) {
+    var min = Number(input.min), max = Number(input.max), value = Number(input.value);
+    var percent = max > min ? Math.max(0, Math.min(100, (value - min) / (max - min) * 100)) : 0;
+    input.style.setProperty("--preset-range-fill", percent + "%");
   }
   function categoryLabel(t, category) {
     var key = "promptPresetCategory_" + String(category || "other"), translated = t(key);
@@ -82,15 +83,12 @@
       this.container.innerHTML = '<details class="prompt-preset-panel"><summary>' + this.t("promptPresetTitle") + '</summary>' +
         '<div class="prompt-preset-body"><input id="prompt-preset-search" type="search" placeholder="' + this.t("promptPresetSearch") + '" />' +
         '<div class="prompt-preset-library-row"><select id="prompt-preset-category"></select><select id="prompt-preset-select"></select></div>' +
-        '<div id="prompt-preset-recent" class="prompt-preset-recent"></div>' +
         '<div class="prompt-preset-toolbar"><button id="prompt-preset-favorite" class="compact-button prompt-preset-favorite" type="button" disabled>' + this.t("promptPresetFavorite") + '</button>' +
         '<span id="prompt-preset-type" class="preset-type-badge" hidden></span><button id="prompt-preset-add" class="compact-button" type="button" disabled>' + this.t("promptPresetAddToStack") + '</button></div>' +
         '<div class="prompt-preset-rename"><input id="prompt-preset-display-name" type="text" placeholder="' + this.t("promptPresetLocalName") + '" />' +
         '<button id="prompt-preset-rename" class="compact-button" type="button">' + this.t("rename") + '</button><button id="prompt-preset-reset-name" class="compact-button" type="button">' + this.t("restoreOriginalName") + '</button></div>' +
         '<div class="prompt-preset-actions"><button id="prompt-preset-import" class="compact-button" type="button">' + this.t("promptPresetImport") + '</button>' +
         '<button id="prompt-preset-import-zip" class="compact-button" type="button">' + this.t("promptPresetImportZip") + '</button>' +
-        '<button id="prompt-preset-export" class="compact-button" type="button">' + this.t("promptPresetExport") + '</button>' +
-        '<button id="prompt-preset-export-all" class="compact-button" type="button">' + this.t("promptPresetExportAll") + '</button>' +
         '<button id="prompt-preset-remove" class="compact-button" type="button">' + this.t("promptPresetDeleteLibrary") + '</button>' +
         '<button id="prompt-preset-restore-factory" class="compact-button" type="button">' + this.t("promptPresetRestoreFactory") + '</button></div>' +
         '<div class="field-label">' + this.t("promptPresetCurrentStack") + '</div><div id="prompt-preset-stack" class="prompt-preset-stack"></div>' +
@@ -117,7 +115,7 @@
         '<button id="prompt-preset-zip-cancel" class="compact-button" type="button">' + this.t("cancel") + '</button></div></div></div>' +
         '</div></details>';
       this.search = this.container.querySelector("#prompt-preset-search"); this.category = this.container.querySelector("#prompt-preset-category");
-      this.select = this.container.querySelector("#prompt-preset-select"); this.recent = this.container.querySelector("#prompt-preset-recent");
+      this.select = this.container.querySelector("#prompt-preset-select");
       this.favoriteButton = this.container.querySelector("#prompt-preset-favorite"); this.typeBadge = this.container.querySelector("#prompt-preset-type");
       this.addButton = this.container.querySelector("#prompt-preset-add"); this.displayName = this.container.querySelector("#prompt-preset-display-name");
       this.applyMode = this.container.querySelector("#prompt-preset-apply-mode"); this.removeButton = this.container.querySelector("#prompt-preset-remove");
@@ -137,11 +135,9 @@
       this.container.querySelector("#prompt-preset-import-zip").addEventListener("click", () => this.importZip());
       this.zipConfirm.addEventListener("click", () => this.confirmZipImport());
       this.container.querySelector("#prompt-preset-zip-cancel").addEventListener("click", () => this.closeZipReview());
-      this.container.querySelector("#prompt-preset-export").addEventListener("click", () => this.exportCurrent());
-      this.container.querySelector("#prompt-preset-export-all").addEventListener("click", () => this.exportAll());
       this.container.querySelector("#prompt-preset-restore-factory").addEventListener("click", () => this.restoreFactories());
       this.removeButton.addEventListener("click", () => this.removeCurrent()); this.applyButton.addEventListener("click", () => this.applyCurrent());
-      this.refreshCategories(); this.refreshList(this.registry && this.registry.getRecentId ? this.registry.getRecentId() : ""); this.renderStack();
+      this.refreshCategories(); this.refreshList(""); this.renderStack();
       if (root.PSAIImageHubCompat.enhanceSelects) root.PSAIImageHubCompat.enhanceSelects(this.container);
     }
     setMessage(key, isError, replacements) {
@@ -159,15 +155,6 @@
       this.category.value = Array.prototype.some.call(this.category.options, function match(item) { return item.value === previous; }) ? previous : "all";
       if (root.PSAIImageHubCompat.refreshEnhancedSelect) root.PSAIImageHubCompat.refreshEnhancedSelect(this.category);
     }
-    refreshRecent() {
-      this.recent.innerHTML = ""; var items = this.registry && this.registry.recent ? this.registry.recent(8) : [];
-      if (!items.length) return;
-      var label = document.createElement("span"); label.className = "muted"; label.textContent = this.t("promptPresetRecent") + "："; this.recent.appendChild(label);
-      items.forEach((preset) => {
-        var button = document.createElement("button"); button.type = "button"; button.className = "preset-recent-button"; button.textContent = preset.displayTitle || preset.title;
-        button.addEventListener("click", () => { this.select.value = preset.id; this.selectLibraryPreset(preset.id); }); this.recent.appendChild(button);
-      });
-    }
     refreshList(selectedId) {
       var preferred = selectedId || this.select && this.select.value || "";
       var category = this.category ? this.category.value : "all";
@@ -180,7 +167,7 @@
       replaceOptions(this.select, options);
       if (preferred && this.registry.get(preferred) && Array.prototype.some.call(this.select.options, function match(item) { return item.value === preferred; })) this.select.value = preferred;
       if (root.PSAIImageHubCompat.refreshEnhancedSelect) root.PSAIImageHubCompat.refreshEnhancedSelect(this.select);
-      this.selectLibraryPreset(this.select.value); this.refreshRecent();
+      this.selectLibraryPreset(this.select.value);
     }
     selectLibraryPreset(id) {
       this.currentLibraryPreset = id && this.registry ? this.registry.get(id) : null; var preset = this.currentLibraryPreset;
@@ -254,12 +241,12 @@
         else if (descriptor.type === "select") { input = document.createElement("select"); (descriptor.options || []).forEach(function add(item) { input.appendChild(option(item.value, item.label)); }); input.value = initial; }
         else {
           input = document.createElement("input"); input.type = descriptor.type === "slider" ? "range" : descriptor.type === "toggle" ? "checkbox" : "text";
-          if (descriptor.type === "slider") { input.min = descriptor.min; input.max = descriptor.max; input.step = descriptor.step; input.value = initial; }
+          if (descriptor.type === "slider") { input.min = descriptor.min; input.max = descriptor.max; input.step = descriptor.step; input.value = initial; input.className = "preset-parameter-range"; syncSliderFill(input); }
           else if (descriptor.type === "toggle") input.checked = initial !== false;
           else { input.value = initial || ""; input.placeholder = descriptor.placeholder || ""; }
         }
         input.setAttribute("data-preset-value", descriptor.id); if (descriptor.type !== "toggle") label.appendChild(title); label.appendChild(input); if (descriptor.type === "toggle") label.appendChild(title);
-        if (descriptor.type === "slider") { var output = document.createElement("span"); output.className = "preset-slider-value"; output.textContent = input.value; input.addEventListener("input", function update() { output.textContent = input.value; }); label.appendChild(output); }
+        if (descriptor.type === "slider") { var output = document.createElement("span"); output.className = "preset-slider-value"; output.textContent = input.value; input.addEventListener("input", function update() { output.textContent = input.value; syncSliderFill(input); }); label.appendChild(output); }
         input.addEventListener("change", () => this.saveCurrentValues());
         if (descriptor.description) { var help = document.createElement("small"); help.className = "muted"; help.textContent = descriptor.description; label.appendChild(help); }
         this.controls.appendChild(label);
@@ -323,21 +310,6 @@
         this.setMessage("promptPresetZipImported", false, { count: result.added.length, skipped: result.skipped, failed: result.failed.length });
       } catch (error) { this.closeZipReview(); this.showError(error); }
     }
-    saveJson(text, suggestedName) {
-      if (!this.cepFs || typeof this.cepFs.showSaveDialogEx !== "function" || typeof this.cepFs.writeFile !== "function") throw new normalizer.PromptPresetError(CODES.UNSUPPORTED, "CEP save dialog is unavailable.");
-      var path = saveDialogPath(this.cepFs.showSaveDialogEx(this.t("promptPresetExportDialog"), "", ["json"], suggestedName)); if (!path) return false;
-      var result = this.cepFs.writeFile(path, text); if (!result || result.err !== 0) throw new normalizer.PromptPresetError(CODES.UNSUPPORTED, "Preset file could not be written."); return true;
-    }
-    exportCurrent() {
-      try {
-        if (!this.currentLibraryPreset) throw new normalizer.PromptPresetError(CODES.NOT_FOUND, "Selected preset no longer exists.");
-        if (this.saveJson(packApi.exportPromptPreset(this.currentLibraryPreset), packApi.safePromptPresetFileName(this.currentLibraryPreset.displayTitle, this.currentLibraryPreset.id))) this.setMessage("promptPresetExported", false);
-      } catch (error) { this.showError(error); }
-    }
-    exportAll() {
-      try { var presets = this.registry ? this.registry.list() : []; if (this.saveJson(packApi.exportPromptPresetPack(presets), "PS-AI-Image-Hub-Preset-Pack.json")) this.setMessage("promptPresetPackExported", false, { count: presets.length }); }
-      catch (error) { this.showError(error); }
-    }
     toggleFavorite() { try { if (!this.currentLibraryPreset) return; this.registry.toggleFavorite(this.currentLibraryPreset.id); this.refreshList(this.currentLibraryPreset.id); } catch (error) { this.showError(error); } }
     renameCurrent() { try { if (!this.currentLibraryPreset) return; var id = this.currentLibraryPreset.id; this.registry.rename(id, this.displayName.value); this.refreshList(id); this.renderStack(this.selectedStackId); this.setMessage("promptPresetRenamed", false); } catch (error) { this.showError(error); } }
     resetCurrentName() { try { if (!this.currentLibraryPreset) return; var id = this.currentLibraryPreset.id; this.registry.resetDisplayName(id); this.refreshList(id); this.renderStack(this.selectedStackId); this.setMessage("promptPresetNameRestored", false); } catch (error) { this.showError(error); } }
@@ -361,7 +333,7 @@
           this.saveCurrentValues(); var compiledStack = compilerApi.compilePromptPresetStack(this.stack.list(), this.registry, this.compiler);
           var appliedStack = writePresetToPrompt(this.promptInput, compiledStack.text, this.applyMode.value);
           this.lastAppliedMetadata = { presetIds: compiledStack.presetIds.slice(), presetTitles: compiledStack.presetTitles.slice() };
-          this.registry.recordApplied(compiledStack.presetIds); this.refreshRecent(); this.onApplied(this.lastAppliedMetadata);
+          this.registry.recordApplied(compiledStack.presetIds); this.onApplied(this.lastAppliedMetadata);
           this.setMessage(appliedStack.duplicate ? "promptPresetDuplicateSkipped" : "promptPresetApplied", false); return;
         }
         if (!this.currentLibraryPreset || !this.registry.get(this.currentLibraryPreset.id)) throw new normalizer.PromptPresetError(CODES.NOT_FOUND, "Selected preset no longer exists.");
@@ -372,11 +344,18 @@
       } catch (error) { this.showError(error); }
     }
     getLastAppliedMetadata() { return { presetIds: this.lastAppliedMetadata.presetIds.slice(), presetTitles: this.lastAppliedMetadata.presetTitles.slice() }; }
+    clearCurrentStackAfterGeneration() {
+      if (this.stack && typeof this.stack.clear === "function") this.stack.clear();
+      this.selectedStackId = "";
+      this.lastAppliedMetadata = { presetIds: [], presetTitles: [] };
+      this.renderStack("");
+      return true;
+    }
   }
 
   return { PromptPresetPanel: PromptPresetPanel, promptPresetErrorKey: errorKey,
     writePresetToPrompt: writePresetToPrompt, promptPresetFileName: fileName,
-    promptPresetSaveDialogPath: saveDialogPath, promptPresetCategoryLabel: categoryLabel,
+    promptPresetCategoryLabel: categoryLabel, syncPromptPresetSliderFill: syncSliderFill,
     promptPresetFavoriteButtonState: favoriteButtonState, createPromptPresetSearchDebounce: debounce,
     PROMPT_PRESET_FAVORITES_CATEGORY_KEY: FAVORITES_CATEGORY_KEY };
 }));

@@ -56,7 +56,7 @@ test("panel reopen reads the same Provider model and only UI preferences use the
   assert.equal(reopened.getModel("grs"), "gpt-image-2-vip");
   assert.equal(reopened.getMatchMainSize(), false);
   reopened.setMatchMainSize(true);
-  assert.deepEqual(JSON.parse(storage.getItem(UI_PREFERENCES_STORAGE_KEY)), { matchMainSize: true, selectionPromptConstraint: true });
+  assert.deepEqual(JSON.parse(storage.getItem(UI_PREFERENCES_STORAGE_KEY)), { matchMainSize: true, selectionPromptConstraint: true, generationAdvancedOpen: false });
 });
 
 test("VIP 4K to ordinary gpt-image-2 capability falls back to 1K", () => {

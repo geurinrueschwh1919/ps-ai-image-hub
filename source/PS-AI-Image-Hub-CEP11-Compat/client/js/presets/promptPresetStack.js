@@ -49,6 +49,11 @@
       if (before === this.items.length) return false;
       this.persist(); return true;
     }
+    clear() {
+      this.items = [];
+      this.persist();
+      return [];
+    }
     move(id, direction) {
       var value = String(id || ""), index = this.items.findIndex(function match(item) { return item.presetId === value; });
       var target = index + Number(direction || 0);

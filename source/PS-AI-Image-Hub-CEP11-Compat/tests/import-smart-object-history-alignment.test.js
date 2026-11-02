@@ -107,12 +107,12 @@ test("Smart Object host failure is explicit and never falls back to ordinary or 
 });
 
 test("new fixed host method is allowlisted while unknown methods remain blocked", () => {
-  assert.equal(ALLOWED_HOST_METHODS.importSmartObjectToBounds, 5);
-  assert.equal(buildHostCall("importSmartObjectToBounds", ["C:/a.png", 1, 2, 3, 4]),
-    'PSAIImageHubCompatHost.importSmartObjectToBounds("C:/a.png","1","2","3","4")');
+  assert.equal(ALLOWED_HOST_METHODS.importSmartObjectToBounds, 6);
+  assert.equal(buildHostCall("importSmartObjectToBounds", ["C:/a.png", 1, 2, 3, 4, null]),
+    'PSAIImageHubCompatHost.importSmartObjectToBounds("C:/a.png","1","2","3","4","null")');
   assert.throws(() => buildHostCall("executeAnything", []), /not allowed/);
   const host = fs.readFileSync(path.resolve(__dirname, "../host/host.jsx"), "utf8");
-  const body = host.slice(host.indexOf("api.importSmartObjectToBounds"), host.indexOf("api._nextGeneratedLayerNameFromNames"));
+  const body = host.slice(host.indexOf("api.importSmartObjectToBounds"), host.indexOf("function findLayerByName"));
   assert.match(body, /newPlacedLayer/); assert.match(body, /importedLayer\.resize/); assert.match(body, /importedLayer\.translate/);
   assert.doesNotMatch(body, /canvas|toDataURL|drawImage/i);
 });

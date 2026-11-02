@@ -22,12 +22,12 @@ function store(options) {
 }
 function input(prompt) { return { providerId: "grs", modelId: "nano-banana-2", prompt, aspectRatio: "1:1", imageSize: "1K", imageInputs: { mainImage: { id: "m", base64: "SECRET-REFERENCE" }, referenceImages: [{ id: "r", base64: "SECRET-REFERENCE" }] } }; }
 
-test("success history persists metadata and a permanent thumbnail without reference Base64", async () => {
+test("success history persists metadata and the permanent original without reference Base64", async () => {
   const fs = fakeFs(); fs.files.set("mock.png", pngBase64());
   const history = store({ cepFs: fs });
   const entry = await history.recordSuccess(input("a prompt"), { providerId: "grs", modelId: "nano-banana-2", taskId: "task-1", importState: "imported", images: [{ importSource: { type: "plugin-asset", relativePath: "client/assets/mock-result.png" } }] });
   assert.equal(entry.status, "succeeded"); assert.equal(entry.hasMainImage, true); assert.equal(entry.referenceImageCount, 1); assert.equal(entry.importedToPhotoshop, true);
-  assert.match(entry.localResultFile, /history\\images\\history-.*\.png$/);
+  assert.match(entry.localResultFile, /history\\originals\\history-.*\.png$/);
   const serialized = fs.files.get("C:\\UserData\\PSAIImageHubCompat\\history\\history.json");
   assert.equal(serialized.includes("SECRET-REFERENCE"), false); assert.equal(serialized.includes("apiKey"), false);
 });

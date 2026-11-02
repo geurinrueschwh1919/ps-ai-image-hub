@@ -100,6 +100,7 @@
       this.promptPresetRegistry = dependencies.promptPresetRegistry || null;
       this.promptPresetCompiler = dependencies.promptPresetCompiler || null;
       this.promptPresetStack = dependencies.promptPresetStack || null;
+      this.autoSharpenManager = dependencies.autoSharpenManager || null;
       this.compatFileDialog = dependencies.compatFileDialog || null;
       this.cepCapabilities = dependencies.cepCapabilities || {};
       this.hostCapabilities = dependencies.hostCapabilities || {};
@@ -117,19 +118,22 @@
       this.references = [];
       this.documentMetadata = null;
       this.lastPresetMetadata = { presetIds: [], presetTitles: [] };
+      this.mounted = false;
     }
 
     mount() {
+      if (this.mounted) return;
+      this.mounted = true;
       this.root.innerHTML = `
         <section class="panel-shell">
-          <header class="app-header"><h1>${this.t("appTitle")}</h1><span class="phase-badge">v1.0.3</span></header>
           ${this.storagePersistent ? "" : '<p class="compat-warning">' + this.t("compatSessionStorageWarning") + "</p>"}
           <nav class="tab-bar" role="tablist"><button class="tab-button" data-tab="generate" role="tab" aria-selected="true" type="button">${this.t("generateTab")}</button><button class="tab-button" data-tab="settings" role="tab" aria-selected="false" type="button">${this.t("settings")}</button><button class="tab-button" data-tab="history" role="tab" aria-selected="false" type="button">${this.t("history")}</button></nav>
           <section id="tab-generate" class="tab-panel" data-tab-panel="generate" role="tabpanel">
-          <section class="host-section"><h2>${this.t("photoshopStatus")}</h2><div class="host-line"><div id="host-status" class="host-status"></div><button id="refresh-host" class="compact-button" type="button">${this.t("refreshPhotoshop")}</button></div></section>
+          <section class="host-section" aria-label="${this.t("photoshopStatus")}"><div class="field-label host-status-label">${this.t("photoshopStatus")}</div><div class="host-line"><div id="host-status" class="host-status" role="status"></div><button id="refresh-host" class="compact-button host-refresh" type="button" title="${this.t("refreshPhotoshop")}" aria-label="${this.t("refreshPhotoshop")}">↻</button></div></section>
           <label class="field-label" for="provider-select">${this.t("apiService")}</label><select id="provider-select"></select>
           <label class="field-label" for="model-selector">${this.t("model")}</label><div id="model-selector"></div>
           <label class="field-label" for="prompt-input">${this.t("prompt")}</label><textarea id="prompt-input" rows="5" placeholder="${this.t("promptPlaceholder")}"></textarea>
+          <div class="button-row generate-action-bar"><button id="generate-button" class="primary-button" type="button">${this.t("generate")}</button><button id="cancel-generation" class="danger-button" type="button" hidden>${this.t("cancelGeneration")}</button></div>
           <div id="prompt-preset-container"></div>
           <section class="reference-section main-image-section">
             <div class="field-heading"><span class="field-label">${this.t("mainImage")}</span><button class="help-button" type="button" title="${this.t("mainImageHelp")}">?</button></div>
@@ -145,6 +149,7 @@
           <div id="aspect-ratio-field" title="${this.t("followReferenceHelp")}"><label class="field-label" for="aspect-ratio">${this.t("aspectRatio")}</label><select id="aspect-ratio"></select></div>
           <div id="image-size-field" hidden title="${this.t("outputResolutionHelp")}"><label class="field-label" for="image-size">${this.t("outputResolution")}</label><select id="image-size"></select></div>
           <div id="import-quality-warning" class="import-quality-warning" hidden></div>
+          <details id="generation-advanced" class="generation-advanced"><summary>${this.t("generationAdvanced")}<span id="generation-advanced-summary" class="muted"></span></summary><div class="generation-advanced-body">
           <section id="provider-generation-options" class="provider-generation-options" hidden>
             <label id="negative-prompt-field" hidden><span class="field-label">${this.t("negativePrompt")}</span><textarea id="negative-prompt" rows="3" placeholder="${this.t("negativePromptPlaceholder")}"></textarea></label>
             <label id="prompt-extend-field" class="inline-check" hidden><input id="prompt-extend" type="checkbox" checked /> ${this.t("promptExtend")}</label>
@@ -156,11 +161,31 @@
             <p id="provider-cost-hint" class="muted" hidden>${this.t("bailianCostHint")}</p>
           </section>
           <div class="check-list"><label><input id="auto-import" type="checkbox" checked /> ${this.t("autoImport")}</label></div>
-          <div class="button-row"><button id="generate-button" class="primary-button" type="button">${this.t("generate")}</button><button id="cancel-generation" class="danger-button" type="button" hidden>${this.t("cancelGeneration")}</button></div>
+          <label class="field-label" for="auto-sharpen-mode">${this.t("autoSharpenLabel")}</label>
+          <select id="auto-sharpen-mode"><option value="off">${this.t("autoSharpenOff")}</option><option value="micro">${this.t("autoSharpenMicro")}</option><option value="natural">${this.t("autoSharpenNatural")}</option><option value="standard">${this.t("autoSharpenStandard")}</option><option value="strong">${this.t("autoSharpenStrong")}</option><option value="custom">${this.t("autoSharpenCustom")}</option></select>
+          <div id="auto-sharpen-options" class="auto-sharpen-options">
+            <div id="auto-sharpen-micro-options" class="auto-sharpen-parameter-group" hidden>
+              <label class="field-label">${this.t("autoSharpenRadius")}</label>
+              <div class="auto-sharpen-number-row"><button id="micro-radius-minus" class="compact-button" type="button">−</button><input id="micro-radius" type="number" min="0.1" max="3.0" step="0.1" inputmode="decimal" /><button id="micro-radius-plus" class="compact-button" type="button">+</button><span>px</span></div>
+              <div class="auto-sharpen-summary"><span>${this.t("autoSharpenBlendMode")}: ${this.t("autoSharpenLinearLight")}</span><span>${this.t("autoSharpenOpacity")}: 100%</span></div>
+            </div>
+            <div id="auto-sharpen-custom-options" class="auto-sharpen-parameter-group" hidden>
+              <label><span class="field-label">${this.t("autoSharpenRadiusMode")}</span><select id="custom-radius-mode"><option value="auto">${this.t("autoSharpenRadiusAuto")}</option><option value="manual">${this.t("autoSharpenRadiusManual")}</option></select></label>
+              <div id="custom-radius-manual-row" hidden><label class="field-label">${this.t("autoSharpenRadius")}</label><div class="auto-sharpen-number-row"><button id="custom-radius-minus" class="compact-button" type="button">−</button><input id="custom-radius" type="number" min="0.1" max="10.0" step="0.1" inputmode="decimal" /><button id="custom-radius-plus" class="compact-button" type="button">+</button><span>px</span></div></div>
+              <label><span class="field-label">${this.t("autoSharpenBlendMode")}</span><select id="custom-blend-mode" aria-label="${this.t("autoSharpenBlendMode")}"><option value="softLight">${this.t("autoSharpenSoftLight")}</option><option value="overlay">${this.t("autoSharpenOverlay")}</option><option value="linearLight">${this.t("autoSharpenLinearLight")}</option></select></label>
+              <label><span class="field-label">${this.t("autoSharpenOpacity")}</span><div class="auto-sharpen-opacity-row"><input id="custom-opacity-range" class="auto-sharpen-opacity-range" type="range" min="0" max="100" step="1" aria-describedby="custom-opacity-value" /><input id="custom-opacity" type="number" min="0" max="100" step="1" /><output id="custom-opacity-value" for="custom-opacity-range custom-opacity" aria-live="polite">100%</output></div></label>
+            </div>
+            <label id="suppress-color-fringing-field" class="inline-check" hidden><input id="suppress-color-fringing" type="checkbox" /> ${this.t("autoSharpenSuppressColor")}</label>
+            <p id="suppress-color-fringing-help" class="muted" hidden>${this.t("autoSharpenSuppressColorHelp")}</p>
+          </div>
+          <p class="muted auto-sharpen-help">${this.t("autoSharpenLocalNotice")}</p>
+          <p class="muted auto-sharpen-help">${this.t("autoSharpenStrengthNotice")}</p>
+
+          </div></details>
           <div class="button-row"><button id="recover-task" type="button" title="${this.t("recoverOriginalTaskHelp")}" hidden>${this.t("recoverLastTask")}</button></div>
           <div id="recovery-input-notice" class="muted" hidden></div>
           <section class="output-section"><h2>${this.t("generationStatus")}</h2><div id="status-line" class="status-line"></div></section>
-          <section class="output-section"><h2>${this.t("resultPreview")}</h2><div id="result-container" class="result-container"></div><button id="import-button" type="button" disabled>${this.t("importPhotoshop")}</button></section>
+          <details id="result-details" class="output-section result-details"><summary>${this.t("resultPreview")}<span class="muted">${this.t("resultPreviewToggleHint")}</span></summary><div id="result-container" class="result-container"></div><div class="button-row"><button id="import-button" type="button" disabled>${this.t("importPhotoshop")}</button><button id="manual-sharpen-button" type="button" disabled>${this.t("manualAutoSharpen")}</button></div></details>
           </section>
           <section id="tab-settings" class="tab-panel" data-tab-panel="settings" role="tabpanel" hidden><div id="settings-container" class="settings-container"></div></section>
           <section id="tab-history" class="tab-panel" data-tab-panel="history" role="tabpanel" hidden><div id="history-container"></div></section>
@@ -169,14 +194,38 @@
       this.providerSelect = this.root.querySelector("#provider-select"); this.promptInput = this.root.querySelector("#prompt-input");
       this.aspectRatio = this.root.querySelector("#aspect-ratio"); this.imageSizeField = this.root.querySelector("#image-size-field");
       this.imageSize = this.root.querySelector("#image-size"); this.autoImport = this.root.querySelector("#auto-import");
+      this.autoSharpenMode = this.root.querySelector("#auto-sharpen-mode");
+      this.autoSharpenMicroOptions = this.root.querySelector("#auto-sharpen-micro-options");
+      this.autoSharpenCustomOptions = this.root.querySelector("#auto-sharpen-custom-options");
+      this.microRadiusInput = this.root.querySelector("#micro-radius");
+      this.customRadiusMode = this.root.querySelector("#custom-radius-mode");
+      this.customRadiusManualRow = this.root.querySelector("#custom-radius-manual-row");
+      this.customRadiusInput = this.root.querySelector("#custom-radius");
+      this.customBlendMode = this.root.querySelector("#custom-blend-mode");
+      this.customOpacityRange = this.root.querySelector("#custom-opacity-range");
+      this.customOpacityInput = this.root.querySelector("#custom-opacity");
+      this.customOpacityValue = this.root.querySelector("#custom-opacity-value");
+      this.suppressColorFringingField = this.root.querySelector("#suppress-color-fringing-field");
+      this.suppressColorFringingHelp = this.root.querySelector("#suppress-color-fringing-help");
+      this.suppressColorFringing = this.root.querySelector("#suppress-color-fringing");
+      this.autoSharpenMode.value = this.autoSharpenManager ? this.autoSharpenManager.getMode() : "off";
       this.importQualityWarning = this.root.querySelector("#import-quality-warning");
       this.providerOptions = this.root.querySelector("#provider-generation-options");
       this.negativePrompt = this.root.querySelector("#negative-prompt");
       this.promptExtend = this.root.querySelector("#prompt-extend"); this.promptExtendMode = this.root.querySelector("#prompt-extend-mode");
       this.enableThinking = this.root.querySelector("#enable-thinking"); this.seedInput = this.root.querySelector("#seed");
       this.providerOptionsNotice = this.root.querySelector("#provider-options-notice");
+      this.generationAdvanced = this.root.querySelector("#generation-advanced");
+      this.generationAdvancedSummary = this.root.querySelector("#generation-advanced-summary");
+      this.resultDetails = this.root.querySelector("#result-details");
+      this.generationAdvanced.open = Boolean(this.uiStateStore && this.uiStateStore.getGenerationAdvancedOpen());
+      this.generationAdvanced.addEventListener("toggle", () => {
+        if (this.uiStateStore) this.uiStateStore.setGenerationAdvancedOpen(this.generationAdvanced.open);
+      });
+      this.autoImport.addEventListener("change", () => this.syncAdvancedSummary());
       this.generateButton = this.root.querySelector("#generate-button"); this.cancelButton = this.root.querySelector("#cancel-generation");
       this.recoverButton = this.root.querySelector("#recover-task"); this.importButton = this.root.querySelector("#import-button");
+      this.manualSharpenButton = this.root.querySelector("#manual-sharpen-button");
       this.recoveryNotice = this.root.querySelector("#recovery-input-notice");
       this.selectionConstraintField = this.root.querySelector("#selection-prompt-constraint-field");
       this.selectionConstraint = this.root.querySelector("#selection-prompt-constraint");
@@ -205,12 +254,15 @@
       }
       this.settingsPanel = new views.SettingsPanel(this.root.querySelector("#settings-container"), null, this.t, {
         embeddedTab: true, providerManager: this.providerManager, uiStateStore: this.uiStateStore, storageManager: this.storageManager,
+        historyStore: this.historyStore,
+        isReloadBlocked: () => this.isReloadBlocked(),
         onProvidersChanged: (providerId) => { this.populateProviders(); if (providerId) this.providerSelect.value = providerId; this.populateModels(); }
       });
       this.populateProviders(); this.populateModels(); this.statusView.update("idle"); this.resultView.clear(); this.settingsPanel.mount();
       this.historyPanel = new views.HistoryPanel(this.root.querySelector("#history-container"), {
         historyStore: this.historyStore, t: this.t,
-        onReimport: (entry) => this.reimportHistoryEntry(entry), onRestore: (entry) => this.restoreHistoryEntry(entry)
+        onReimport: (entry) => this.reimportHistoryEntry(entry), onRestore: (entry) => this.restoreHistoryEntry(entry),
+        onBusyChange: () => { if (this.settingsPanel) this.settingsPanel.syncReloadButton(); }
       });
       this.historyPanel.mount();
       root.PSAIImageHubCompat.enhanceSelects(this.root);
@@ -228,6 +280,23 @@
       this.cancelButton.addEventListener("click", () => this.generationManager.cancelGeneration());
       this.recoverButton.addEventListener("click", () => this.handleRecover());
       this.importButton.addEventListener("click", () => this.handleManualImport());
+      this.manualSharpenButton.addEventListener("click", () => this.handleManualSharpen());
+      this.autoSharpenMode.addEventListener("change", () => {
+        if (this.autoSharpenLocalOverride && this.autoSharpenMode.value !== "off") this.autoSharpenLocalOverride = false;
+        if (this.autoSharpenManager) this.autoSharpenManager.setMode(this.autoSharpenMode.value);
+        this.syncAutoSharpenOptions();
+      });
+      this.microRadiusInput.addEventListener("change", () => this.persistAutoSharpenNumber("microRadius", this.microRadiusInput, 0.1, 3.0, 0.5));
+      this.root.querySelector("#micro-radius-minus").addEventListener("click", () => this.stepAutoSharpenNumber("microRadius", this.microRadiusInput, -0.1, 0.1, 3.0));
+      this.root.querySelector("#micro-radius-plus").addEventListener("click", () => this.stepAutoSharpenNumber("microRadius", this.microRadiusInput, 0.1, 0.1, 3.0));
+      this.customRadiusMode.addEventListener("change", () => { this.saveAutoSharpenPreferences({ customRadiusMode: this.customRadiusMode.value }); this.syncAutoSharpenOptions(); });
+      this.customRadiusInput.addEventListener("change", () => this.persistAutoSharpenNumber("customManualRadius", this.customRadiusInput, 0.1, 10.0, 0.5));
+      this.root.querySelector("#custom-radius-minus").addEventListener("click", () => this.stepAutoSharpenNumber("customManualRadius", this.customRadiusInput, -0.1, 0.1, 10.0));
+      this.root.querySelector("#custom-radius-plus").addEventListener("click", () => this.stepAutoSharpenNumber("customManualRadius", this.customRadiusInput, 0.1, 0.1, 10.0));
+      this.customBlendMode.addEventListener("change", () => this.saveAutoSharpenPreferences({ customBlendMode: this.customBlendMode.value }));
+      this.customOpacityRange.addEventListener("input", () => { var value = this.syncCustomOpacityUi(this.customOpacityRange.value); this.saveAutoSharpenPreferences({ customOpacity: value }); });
+      this.customOpacityInput.addEventListener("change", () => { var value = this.syncCustomOpacityUi(this.customOpacityInput.value); this.saveAutoSharpenPreferences({ customOpacity: value }); });
+      this.suppressColorFringing.addEventListener("change", () => this.saveAutoSharpenPreferences({ suppressColorFringing: this.suppressColorFringing.checked }));
       this.root.querySelector("#refresh-host").addEventListener("click", () => this.refreshHostInfo());
       this.root.querySelector("#main-local").addEventListener("click", () => this.setLocalMainImage());
       this.root.querySelector("#main-canvas").addEventListener("click", () => this.setPhotoshopMainImage("canvas"));
@@ -239,7 +308,7 @@
         if (change.type === "model" && change.providerId === this.providerSelect.value && this.modelSelector.getValue() !== change.modelId) this.populateModels(change.modelId);
         if (change.type === "matchMainSize") this.updateImportQualityWarning();
       });
-      this.refreshHostInfo(); this.syncRecoveryButton();
+      this.syncAutoSharpenOptions(); this.refreshHostInfo(); this.syncRecoveryButton();
     }
 
     setHostCapabilities(capabilities) {
@@ -405,7 +474,7 @@
       return this.aspectRatio.value;
     }
 
-    replaceMainImage(image) { if (this.mainImage) this.referenceImageManager.remove(this.mainImage); this.mainImage = image || null; this.renderMainImage(); this.syncGenerationParameters(); if (this.promptPresetPanel) this.promptPresetPanel.refreshContext(); }
+    replaceMainImage(image) { if (this.mainImage) this.referenceImageManager.remove(this.mainImage); this.mainImage = image || null; this.applyAutoSharpenSelectionSafety(Boolean(this.mainImage && this.mainImage.sourceType === "current-selection")); this.renderMainImage(); this.syncGenerationParameters(); if (this.promptPresetPanel) this.promptPresetPanel.refreshContext(); }
     addReference(reference) {
       if (!reference) return;
       if (this.references.length >= root.PSAIImageHubCompat.MAX_REFERENCE_IMAGES) { this.referenceImageManager.remove(reference); this.statusView.update("failed", { message: this.t("referenceLimit", { count: root.PSAIImageHubCompat.MAX_REFERENCE_IMAGES }) }); return; }
@@ -453,16 +522,128 @@
     setBusy(value) { this.isGenerating = value; this.syncControls(); }
     beginBusyOperation() { this.busyOperationCount += 1; this.setBusy(true); }
     endBusyOperation() { this.busyOperationCount = Math.max(0, this.busyOperationCount - 1); this.setBusy(this.busyOperationCount > 0); }
+    isReloadBlocked() {
+      return this.isGenerating || this.isImporting || this.busyOperationCount > 0 ||
+        Boolean(this.historyPanel && typeof this.historyPanel.isBusy === "function" && this.historyPanel.isBusy());
+    }
     activateTab(tabId) {
       var selected = TAB_IDS.indexOf(tabId) !== -1 ? tabId : "generate";
       this.root.querySelectorAll("[data-tab-panel]").forEach((panel) => { panel.hidden = panel.getAttribute("data-tab-panel") !== selected; });
       this.root.querySelectorAll(".tab-button").forEach((button) => { button.setAttribute("aria-selected", String(button.getAttribute("data-tab") === selected)); });
       if (selected === "history" && this.historyPanel) this.historyPanel.refresh();
     }
+    saveAutoSharpenPreferences(patch) {
+      return this.autoSharpenManager && typeof this.autoSharpenManager.setPreferences === "function"
+        ? this.autoSharpenManager.setPreferences(patch) : null;
+    }
+    applyAutoSharpenSelectionSafety(isLocal) {
+      if (!this.autoSharpenMode) return;
+      if (isLocal) {
+        this.autoSharpenLocalOverride = true;
+        this.autoSharpenMode.value = "off";
+      } else if (this.autoSharpenLocalOverride) {
+        this.autoSharpenLocalOverride = false;
+        this.autoSharpenMode.value = this.autoSharpenManager ? this.autoSharpenManager.getMode() : "off";
+      }
+      root.PSAIImageHubCompat.refreshEnhancedSelect(this.autoSharpenMode);
+      this.syncAutoSharpenOptions();
+    }
+    persistAutoSharpenNumber(key, input, minimum, maximum, fallback) {
+      var value = Number(input.value);
+      if (!isFinite(value)) value = fallback;
+      value = Math.round(Math.max(minimum, Math.min(maximum, value)) * 10) / 10;
+      input.value = value.toFixed(1);
+      var patch = {}; patch[key] = value;
+      this.saveAutoSharpenPreferences(patch);
+      return value;
+    }
+    stepAutoSharpenNumber(key, input, delta, minimum, maximum) {
+      var current = Number(input.value);
+      if (!isFinite(current)) current = minimum;
+      input.value = String(current + delta);
+      return this.persistAutoSharpenNumber(key, input, minimum, maximum, minimum);
+    }
+    syncCustomOpacityUi(value) {
+      var parsed = Number(value);
+      if (!isFinite(parsed)) parsed = 0;
+      var normalized = Math.max(0, Math.min(100, Math.round(parsed)));
+      this.customOpacityRange.value = String(normalized);
+      this.customOpacityInput.value = String(normalized);
+      if (this.customOpacityValue) this.customOpacityValue.textContent = normalized + "%";
+      if (this.customOpacityRange && this.customOpacityRange.style && typeof this.customOpacityRange.style.setProperty === "function") {
+        this.customOpacityRange.style.setProperty("--range-progress", normalized + "%");
+      }
+      return normalized;
+    }
+    syncAutoSharpenOptions() {
+      var preferences = this.autoSharpenManager && typeof this.autoSharpenManager.getPreferences === "function"
+        ? this.autoSharpenManager.getPreferences() : {
+          microRadius: 0.5, customRadiusMode: "auto", customManualRadius: 0.5,
+          customBlendMode: "linearLight", customOpacity: 100, suppressColorFringing: false
+        };
+      var mode = this.autoSharpenMode.value;
+      var uiState = root.PSAIImageHubCompat.buildAutoSharpenUiState
+        ? root.PSAIImageHubCompat.buildAutoSharpenUiState(mode, preferences)
+        : {
+          sharpeningEnabled: ["micro", "natural", "standard", "strong", "custom"].indexOf(mode) !== -1,
+          suppressColorFringingChecked: mode !== "off" && preferences.suppressColorFringing === true,
+          suppressColorFringingDisabled: mode === "off",
+          microControlsDisabled: mode !== "micro",
+          customControlsDisabled: mode !== "custom"
+        };
+      var sharpeningEnabled = uiState.sharpeningEnabled;
+      var microEnabled = !uiState.microControlsDisabled;
+      var customEnabled = !uiState.customControlsDisabled;
+      this.autoSharpenMicroOptions.hidden = mode !== "micro";
+      this.autoSharpenCustomOptions.hidden = mode !== "custom";
+      this.suppressColorFringingField.hidden = false;
+      this.suppressColorFringingHelp.hidden = false;
+      this.microRadiusInput.value = Number(preferences.microRadius).toFixed(1);
+      this.microRadiusInput.disabled = !microEnabled;
+      this.root.querySelector("#micro-radius-minus").disabled = !microEnabled;
+      this.root.querySelector("#micro-radius-plus").disabled = !microEnabled;
+      this.customRadiusMode.value = preferences.customRadiusMode;
+      this.customRadiusManualRow.hidden = mode !== "custom" || preferences.customRadiusMode !== "manual";
+      this.customRadiusMode.disabled = !customEnabled;
+      this.customRadiusInput.value = Number(preferences.customManualRadius).toFixed(1);
+      this.customRadiusInput.disabled = !customEnabled || preferences.customRadiusMode !== "manual";
+      this.root.querySelector("#custom-radius-minus").disabled = this.customRadiusInput.disabled;
+      this.root.querySelector("#custom-radius-plus").disabled = this.customRadiusInput.disabled;
+      this.customBlendMode.value = preferences.customBlendMode;
+      this.customBlendMode.disabled = !customEnabled;
+      this.syncCustomOpacityUi(preferences.customOpacity);
+      this.customOpacityRange.disabled = !customEnabled;
+      this.customOpacityInput.disabled = !customEnabled;
+      this.suppressColorFringing.checked = uiState.suppressColorFringingChecked;
+      this.suppressColorFringing.disabled = uiState.suppressColorFringingDisabled;
+      root.PSAIImageHubCompat.refreshEnhancedSelect(this.customRadiusMode);
+      root.PSAIImageHubCompat.refreshEnhancedSelect(this.customBlendMode);
+      this.syncImportButton(); this.syncAdvancedSummary();
+    }
+    syncAdvancedSummary() {
+      if (!this.generationAdvancedSummary) return;
+      var mode = this.autoSharpenMode && this.autoSharpenMode.value || "off";
+      var names = { off: "autoSharpenOff", micro: "autoSharpenMicro", natural: "autoSharpenNatural", standard: "autoSharpenStandard", strong: "autoSharpenStrong", custom: "autoSharpenCustom" };
+      this.generationAdvancedSummary.textContent = this.t("generationAdvancedSummary", {
+        autoImport: this.t(this.autoImport && this.autoImport.checked ? "generationEnabled" : "generationDisabled"),
+        sharpen: this.t(names[mode] || names.off)
+      });
+    }
+    syncResultDisclosure() {
+      if (!this.resultDetails) return;
+      var result = this.currentResult, state = result && result.importState;
+      // Only transitions change disclosure state. User-opened previews remain open
+      // through unrelated control updates, and a new result gets its own state.
+      if (this.lastDisclosureResult === result && this.lastDisclosureState === state) return;
+      this.lastDisclosureResult = result; this.lastDisclosureState = state;
+      this.resultDetails.open = Boolean(result && state !== "imported");
+    }
     syncControls() {
       var busy = this.isGenerating || this.isImporting; this.generateButton.disabled = busy; this.providerSelect.disabled = busy; this.modelSelector.setDisabled(busy);
       this.generateButton.textContent = this.isGenerating ? this.t("generating") : this.t("generate"); this.cancelButton.hidden = !this.isGenerating;
       root.PSAIImageHubCompat.refreshEnhancedSelect(this.providerSelect); this.syncGenerationParameters(); this.syncImportButton();
+      if (this.settingsPanel) this.settingsPanel.syncReloadButton();
+      this.syncAdvancedSummary(); this.syncResultDisclosure();
     }
     handlePipelineStatus(status, payload) {
       if (payload && payload.executionId && this.currentUiExecutionId && payload.executionId !== this.currentUiExecutionId) {
@@ -480,16 +661,20 @@
       var state = this.currentResult ? this.currentResult.importState : null;
       if (!this.capabilityAvailable("layerImport")) { this.importButton.disabled = true; this.importButton.textContent = this.t("importPhotoshop"); this.importButton.title = this.t("compatUnsupported"); return; }
       this.importButton.title = "";
+      var sharpeningEnabled = Boolean(this.autoSharpenManager && typeof this.autoSharpenManager.isModeEnabled === "function" &&
+        this.autoSharpenManager.isModeEnabled(this.autoSharpenMode && this.autoSharpenMode.value));
+      this.manualSharpenButton.disabled = !(this.currentResult && this.currentResult.importState === "imported" && sharpeningEnabled);
+      if (this.isGenerating || this.isImporting) this.manualSharpenButton.disabled = true;
       if (!state) { this.importButton.disabled = true; this.importButton.textContent = this.t("importPhotoshop"); return; }
       if (state === "importing") { this.importButton.disabled = true; this.importButton.textContent = this.t("importingPhotoshop"); return; }
-      if (state === "imported") { this.importButton.disabled = true; this.importButton.textContent = this.t("importedPhotoshop"); return; }
+      if (state === "imported") { this.importButton.disabled = this.isGenerating || this.isImporting; this.importButton.textContent = this.t("importAgain"); return; }
       this.importButton.disabled = this.isGenerating || this.isImporting; this.importButton.textContent = state === "failed" ? this.t("importAgain") : this.t("importPhotoshop");
     }
 
     async handleGenerate(options) {
       var action = options || {};
       var operationExecutionId = null;
-      this.beginBusyOperation(); this.currentResult = null; this.resultView.clear(); this.syncImportButton();
+      this.beginBusyOperation(); this.currentResult = null; this.resultView.clear(); this.syncImportButton(); this.syncResultDisclosure();
       try {
         var provider = this.providerManager.getProvider(this.providerSelect.value), model = provider && provider.getModel(this.modelSelector.getValue());
         var finalPrompt = applySelectionEditConstraint(this.promptInput.value, this.mainImage, this.selectionConstraint.checked, this.t("selectionPromptConstraint"));
@@ -506,8 +691,16 @@
           seed: this.seedInput.value,
           presetMetadata: { presetIds: (this.lastPresetMetadata.presetIds || []).slice(), presetTitles: (this.lastPresetMetadata.presetTitles || []).slice() },
           snapshotSourceExecutionId: action.snapshotRegeneration ? this.restoredExecutionId : null,
-          matchMainSize: Boolean(this.uiStateStore && this.uiStateStore.getMatchMainSize()), autoImport: this.autoImport.checked },
+          matchMainSize: Boolean(this.uiStateStore && this.uiStateStore.getMatchMainSize()), autoImport: this.autoImport.checked,
+          autoSharpenMode: this.mainImage && this.mainImage.sourceType === "current-selection" ? "off" : this.autoSharpenMode.value,
+          autoSharpenIsLocal: Boolean(this.mainImage && this.mainImage.sourceType === "current-selection") },
         { onExecution: (execution) => { operationExecutionId = execution.executionId; this.currentUiExecutionId = execution.executionId; },
+          onProviderSuccess: () => {
+            if (this.promptPresetPanel && typeof this.promptPresetPanel.clearCurrentStackAfterGeneration === "function") {
+              this.promptPresetPanel.clearCurrentStackAfterGeneration();
+            }
+            this.lastPresetMetadata = { presetIds: [], presetTitles: [] };
+          },
           onStatus: (status, payload) => this.handlePipelineStatus(status, payload) });
         if (result && (!operationExecutionId || operationExecutionId === this.currentUiExecutionId)) { this.currentResult = result; this.resultView.render(result); this.syncImportButton(); }
       } catch (error) {
@@ -516,7 +709,9 @@
           this.statusView.update(error.code === "CANCELLED" ? "cancelled" : "failed", { message: message });
         }
       }
-      finally { this.endBusyOperation(); if (!this.busyOperationCount) this.cleanupTransientInputFiles(); this.syncRecoveryButton(); if (this.historyPanel) this.historyPanel.refresh(); }
+      finally {
+        this.endBusyOperation(); if (!this.busyOperationCount) this.cleanupTransientInputFiles(); this.syncRecoveryButton(); if (this.historyPanel) this.historyPanel.refresh();
+      }
     }
 
     syncRecoveryButton() {
@@ -546,6 +741,7 @@
       }
       this.promptInput.value = metadata.finalPrompt || metadata.prompt || "";
       this.mainImage = snapshot.mainImage || null; this.references = snapshot.referenceImages.slice();
+      this.applyAutoSharpenSelectionSafety(Boolean(this.mainImage && this.mainImage.sourceType === "current-selection"));
       this.renderMainImage(); this.renderReferences(); this.syncGenerationParameters();
       if (this.promptPresetPanel) this.promptPresetPanel.refreshContext();
       if (metadata.aspectRatio && Array.prototype.some.call(this.aspectRatio.options, function match(option) { return option.value === metadata.aspectRatio; })) this.aspectRatio.value = metadata.aspectRatio;
@@ -590,7 +786,9 @@
           executionId: originalTask.executionId || metadata.executionId,
           historyId: originalTask.historyId || metadata.historyId,
           importOptions: { matchMainSize: Boolean(target || main) && Boolean(this.uiStateStore && this.uiStateStore.getMatchMainSize()),
-            mainTarget: target, mainDimensions: target ? { width: target.width, height: target.height } : (main ? { width: main.width, height: main.height } : null) },
+            mainTarget: target, mainDimensions: target ? { width: target.width, height: target.height } : (main ? { width: main.width, height: main.height } : null),
+            autoSharpenMode: main && main.sourceType === "current-selection" ? "off" : (this.autoSharpenMode ? this.autoSharpenMode.value : "off"),
+            autoSharpenIsLocal: Boolean(main && main.sourceType === "current-selection") },
           onExecution: (execution) => { operationExecutionId = execution.executionId; this.currentUiExecutionId = execution.executionId; },
           onStatus: (status, payload) => this.handlePipelineStatus(status, payload) });
         if (recoveredResult && (!operationExecutionId || operationExecutionId === this.currentUiExecutionId)) {
@@ -606,9 +804,43 @@
       finally { this.activeRecoveryTask = null; this.endBusyOperation(); this.syncRecoveryButton(); if (this.historyPanel) this.historyPanel.refresh(); }
     }
     async handleManualImport() {
-      if (!this.currentResult) return;
-      try { await this.generationManager.importGeneratedResult(this.currentResult, { onStatus: (status, payload) => this.handlePipelineStatus(status, payload) }); }
-      catch (error) {} finally { this.isImporting = false; this.resultView.updateImportState(this.currentResult); this.syncControls(); }
+      if (!this.currentResult || this.isGenerating || this.isImporting) return;
+      this.isImporting = true;
+      this.syncControls();
+      try { await this.generationManager.importGeneratedResult(this.currentResult, { allowReimport: true, onStatus: (status, payload) => this.handlePipelineStatus(status, payload) }); }
+       catch (error) {} finally {
+        this.isImporting = false; this.resultView.updateImportState(this.currentResult); this.syncControls();
+      }
+    }
+    async handleManualSharpen() {
+      if (this.isGenerating || this.isImporting || !this.currentResult || !this.currentResult.importResult || !this.autoSharpenManager) return;
+      var item = this.currentResult.importResult.items && this.currentResult.importResult.items[0];
+      if (!item) return;
+      var mode = this.autoSharpenMode && this.autoSharpenMode.value;
+      if (!this.autoSharpenManager.isModeEnabled(mode)) {
+        return { applied: false, success: false, skipped: true, reason: "sharpening-disabled" };
+      }
+      this.isImporting = true;
+      this.syncControls();
+      try {
+        var isLocal = Boolean(this.currentResult.importOptions && this.currentResult.importOptions.autoSharpenIsLocal);
+        var sharpened = await this.autoSharpenManager.applyToImportedLayer(item, {
+          mode: mode, isLocal: isLocal, importContext: this.currentResult.importResult.importContext
+        });
+        if (sharpened && sharpened.applied) {
+          this.statusView.update("autoSharpened");
+        } else if (sharpened && sharpened.failed) {
+          if (sharpened.reason === "target-layer-missing") {
+            this.currentResult.importState = "notImported";
+            this.syncResultDisclosure();
+          }
+          this.statusView.update("autoSharpenFailed", { message: this.t(sharpened.reason === "target-layer-missing" ? "sharpenTargetMissing" : sharpened.reason === "target-document-inactive" ? "sharpenTargetDocumentInactive" : "autoSharpenFailed") });
+        }
+        return sharpened;
+      } finally {
+        this.isImporting = false;
+        this.syncControls();
+      }
     }
     async reimportHistoryEntry(entry) {
       if (!entry || (!entry.localResultFile && !entry.resultUrl)) return;
@@ -640,6 +872,8 @@
         historyReimportUsedSavedContext: savedOptions.historyReimportUsedSavedContext === true,
         currentDocumentMatchesSavedImportContext: documentsMatch
       });
+      this.isImporting = true;
+      if (typeof this.syncControls === "function") this.syncControls();
       try {
         await this.generationManager.importGeneratedResult(result, { onStatus: (status, payload) => this.handlePipelineStatus(status, payload) });
         this.historyStore.markImported(entry.id, result.importResult && result.importResult.importContext);
@@ -665,11 +899,11 @@
       root.PSAIImageHubCompat.refreshEnhancedSelect(this.aspectRatio); root.PSAIImageHubCompat.refreshEnhancedSelect(this.imageSize); this.activateTab("generate");
     }
     async refreshHostInfo() {
-      this.hostStatus.textContent = this.t("bridgeChecking");
+      this.hostStatus.title = ""; this.hostStatus.textContent = this.t("bridgeChecking");
       if (!this.photoshopBridge.isAvailable()) { this.hostStatus.textContent = this.t("bridgeUnavailable"); return; }
       try {
         await this.photoshopBridge.ping(); var version = await this.photoshopBridge.getPhotoshopVersion(); var hasDocument = await this.photoshopBridge.hasOpenDocument();
-        if (hasDocument) { this.documentMetadata = await this.photoshopBridge.getDocumentMetadata(); this.hostStatus.textContent = this.t("bridgeReadyDocument", { version: version, document: this.documentMetadata.name }); }
+        if (hasDocument) { this.documentMetadata = await this.photoshopBridge.getDocumentMetadata(); this.hostStatus.textContent = this.t("bridgeReadyDocumentCompact", { version: version, document: this.documentMetadata.name }); this.hostStatus.title = this.t("bridgeReadyDocument", { version: version, document: this.documentMetadata.name }); }
         else { this.documentMetadata = null; this.hostStatus.textContent = this.t("bridgeReadyNoDocument", { version: version }); }
       } catch (error) { this.hostStatus.textContent = errors.toUserMessage(error, this.t); }
     }

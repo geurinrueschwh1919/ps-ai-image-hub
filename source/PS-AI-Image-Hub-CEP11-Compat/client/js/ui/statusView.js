@@ -31,6 +31,8 @@
         imported: payload && payload.result && payload.result.importResult && payload.result.importResult.layerNames
           ? this.t("statusImportedLayer", { layerName: payload.result.importResult.layerNames[0] })
           : this.t("statusImported"),
+        autoSharpened: this.t("statusAutoSharpened"),
+        autoSharpenFailed: payload && payload.message ? payload.message : this.t("autoSharpenFailed"),
         importFailed: payload && payload.message ? payload.message : this.t("generatedButImportFailed"),
         failed: payload && payload.message ? payload.message : this.t("statusFailed")
       };

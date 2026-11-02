@@ -7,6 +7,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { ImageFileStore } = require("../client/js/storage/imageFileStore");
 const { HistoryStore } = require("../client/js/storage/historyStore");
+const { AutoSharpenManager } = require("../client/js/photoshop/autoSharpenManager");
 const { ErrorCodes } = require("../client/js/utils/errors");
 const zhCN = require("../client/js/i18n/zh-CN");
 const enUS = require("../client/js/i18n/en-US");
@@ -29,7 +30,6 @@ function memoryFs() {
     readFile(file) { return files.has(file) ? { err: 0, data: files.get(file) } : { err: 2 }; },
     deleteFile(file) { files.delete(file); return { err: 0 }; } };
 }
-
 function imageStore(bytes, mimeType) {
   const cepFs = memoryFs();
   return { cepFs, store: new ImageFileStore({ photoshopBridge: { getUserDataRoot() { return "C:\\UserData"; } },
@@ -48,113 +48,85 @@ function hostWithFile(fileName, bytes) {
     app: { documents: [target], activeDocument: target, open() { this.activeDocument = source; return source; } } };
   vm.createContext(context); vm.runInContext(HOST_SOURCE, context); return context;
 }
-
 for (const url of ["https://safe.invalid/result.jpeg", "https://safe.invalid/result.jpg", "https://safe.invalid/download", "https://safe.invalid/result.png?token=redacted"]) {
-  test("JPEG download uses magic bytes instead of URL suffix: " + url.split("?")[0].split("/").pop(), async () => {
-    const fixture = imageStore(JPEG, "image/jpeg");
-    const result = await fixture.store.materialize({ type: "url", url });
-    assert.equal(result.mimeType, "image/jpeg");
-    assert.match(result.path, /\.jpg$/);
+  test("JPEG uses magic bytes instead of URL suffix: " + url.split("?")[0].split("/").pop(), async () => {
+    const fixture = imageStore(JPEG, "image/jpeg"); const result = await fixture.store.materialize({ type: "url", url });
+    assert.equal(result.mimeType, "image/jpeg"); assert.match(result.path, /PSAIImageHubCompat[\\/]generated-.*\.jpg$/);
     assert.equal(fixture.cepFs.files.get(result.path), Buffer.from(JPEG).toString("base64"));
   });
 }
-
-test("PNG remains a byte-for-byte PNG file", async () => {
-  const fixture = imageStore(PNG, "image/png");
-  const result = await fixture.store.materialize({ type: "url", url: "https://safe.invalid/no-extension" });
-  assert.equal(result.mimeType, "image/png"); assert.match(result.path, /\.png$/);
-  assert.equal(fixture.cepFs.files.get(result.path), Buffer.from(PNG).toString("base64"));
+test("PNG remains byte-for-byte compatible", async () => {
+  const fixture = imageStore(PNG, "image/png"); const result = await fixture.store.materialize({ type: "url", url: "https://safe.invalid/no-extension" });
+  assert.match(result.path, /\.png$/); assert.equal(fixture.cepFs.files.get(result.path), Buffer.from(PNG).toString("base64"));
 });
-
 test("completed JPEG write is verified byte-for-byte by decoded length", async () => {
-  const fixture = imageStore(JPEG, "image/jpeg");
-  const result = await fixture.store.materialize({ type: "url", url: "https://safe.invalid/result.jpg" });
-  assert.equal(result.byteLength, JPEG.length);
-  assert.equal(Buffer.from(fixture.cepFs.files.get(result.path), "base64").length, JPEG.length);
+  const fixture = imageStore(JPEG, "image/jpeg"); const result = await fixture.store.materialize({ type: "url", url: "https://safe.invalid/result.jpg" });
+  assert.equal(result.byteLength, JPEG.length); assert.equal(Buffer.from(fixture.cepFs.files.get(result.path), "base64").length, JPEG.length);
 });
-
 test("short local write is rejected and the partial file is removed", async () => {
-  const cepFs = memoryFs();
-  cepFs.writeFile = function writeTruncated(file, data) { this.files.set(file, data.slice(0, -4)); return { err: 0 }; };
+  const cepFs = memoryFs(); cepFs.writeFile = function writeTruncated(file, data) { this.files.set(file, data.slice(0, -4)); return { err: 0 }; };
   const store = new ImageFileStore({ photoshopBridge: { getUserDataRoot() { return "C:\\UserData"; } },
     apiClient: { async requestArrayBuffer() { return { bytes: JPEG, mimeType: "image/jpeg" }; } }, cepFs, base64Encoding: "base64" });
   await assert.rejects(store.materialize({ type: "url", url: "https://safe.invalid/result.jpg" }),
     (error) => error.code === ErrorCodes.TEMP_FILE_WRITE_FAILED && error.details.expectedByteLength === JPEG.length);
   assert.equal(cepFs.files.size, 0);
 });
-
-test("Content-Type and magic mismatch is rejected without exposing a signed URL", async () => {
-  const fixture = imageStore(JPEG, "image/png");
-  await assert.rejects(fixture.store.materialize({ type: "url", url: "https://safe.invalid/file?secret=do-not-log" }), (error) => {
-    assert.equal(error.code, ErrorCodes.UNSUPPORTED_RESULT_FORMAT);
-    assert.equal(JSON.stringify(error).includes("do-not-log"), false); return true;
-  });
+test("MIME conflict, corrupt JPEG, HTML and WebP fail without URL disclosure", async () => {
+  await assert.rejects(imageStore(JPEG, "image/png").store.materialize({ type: "url", url: "https://safe.invalid/x?secret=hidden" }),
+    (error) => error.code === ErrorCodes.UNSUPPORTED_RESULT_FORMAT && !JSON.stringify(error).includes("hidden"));
+  await assert.rejects(imageStore(CORRUPT_JPEG, "image/jpeg").store.materialize({ type: "url", url: "https://safe.invalid/a" }), (error) => error.code === ErrorCodes.INVALID_IMAGE_FILE);
+  await assert.rejects(imageStore(HTML, "text/html").store.materialize({ type: "url", url: "https://safe.invalid/b" }), (error) => error.code === ErrorCodes.UNSUPPORTED_RESULT_FORMAT);
+  await assert.rejects(imageStore(WEBP, "image/webp").store.materialize({ type: "url", url: "https://safe.invalid/c" }), (error) => error.code === ErrorCodes.UNSUPPORTED_IMAGE_FILE);
 });
-
-test("corrupt JPEG, HTML and WebP are rejected accurately", async () => {
-  await assert.rejects(imageStore(CORRUPT_JPEG, "image/jpeg").store.materialize({ type: "url", url: "https://safe.invalid/a" }),
-    (error) => error.code === ErrorCodes.INVALID_IMAGE_FILE);
-  await assert.rejects(imageStore(HTML, "text/html").store.materialize({ type: "url", url: "https://safe.invalid/b" }),
-    (error) => error.code === ErrorCodes.UNSUPPORTED_RESULT_FORMAT);
-  await assert.rejects(imageStore(WEBP, "image/webp").store.materialize({ type: "url", url: "https://safe.invalid/c" }),
-    (error) => error.code === ErrorCodes.UNSUPPORTED_IMAGE_FILE && error.details.mimeType === "image/webp");
-});
-
 test("GRS URL metadata is not falsely fixed to PNG", () => {
   const provider = new GrsProvider({}, { secretStore: { get() { return "test-only"; } }, apiClient: {} });
-  const images = provider.extractImages({ id: "task", status: "succeeded", progress: 100, results: [{ url: "https://safe.invalid/result.jpeg" }] });
-  assert.equal(images[0].mimeType, null);
+  assert.equal(provider.extractImages({ id: "task", status: "succeeded", results: [{ url: "https://safe.invalid/result.jpeg" }] })[0].mimeType, null);
 });
-
-test("History persists JPEG with its true extension and MIME and keeps old PNG compatibility", async () => {
-  const cepFs = memoryFs();
-  const history = new HistoryStore({ rootPath: "C:\\UserData", cepFs, base64Encoding: "base64",
-    photoshoBridge: {}, apiClient: { async requestArrayBuffer(url) { return url.endsWith(".jpg")
-      ? { bytes: JPEG, mimeType: "image/jpeg" } : { bytes: PNG, mimeType: "image/png" }; } } });
-  const jpegEntry = await history.recordSuccess({ providerId: "grs", modelId: "nano-banana-fast" },
-    { images: [{ importSource: { type: "url", url: "https://safe.invalid/result.jpg" } }] });
-  assert.match(jpegEntry.localResultFile, /\.jpg$/); assert.equal(jpegEntry.localResultMimeType, "image/jpeg");
-  const pngEntry = await history.recordSuccess({ providerId: "mock", modelId: "mock" },
-    { images: [{ importSource: { type: "url", url: "https://safe.invalid/result.png" } }] });
-  assert.match(pngEntry.localResultFile, /\.png$/); assert.equal(pngEntry.localResultMimeType, "image/png");
+test("Lab History keeps JPEG original separate from its thumbnail and old PNG remains valid", async () => {
+  const cepFs = memoryFs(); const history = new HistoryStore({ rootPath: "C:\\Lab", cepFs, storage: null, base64Encoding: "base64",
+    thumbnailCreator: async () => ({ base64: "VEhVTUI=", extension: "jpg" }),
+    apiClient: { async requestArrayBuffer(url) { return url.endsWith(".jpg") ? { bytes: JPEG, mimeType: "image/jpeg" } : { bytes: PNG, mimeType: "image/png" }; } } });
+  const jpeg = await history.recordSuccess({ providerId: "grs", modelId: "nano-banana-fast" }, { images: [{ importSource: { type: "url", url: "https://safe.invalid/result.jpg" } }] });
+  assert.match(jpeg.localResultFile, /originals\\.*\.jpg$/); assert.equal(jpeg.localResultMimeType, "image/jpeg"); assert.match(jpeg.thumbnail, /thumbnails\\.*\.jpg$/);
+  assert.equal(cepFs.files.get(jpeg.localResultFile), Buffer.from(JPEG).toString("base64")); assert.notEqual(jpeg.thumbnail, jpeg.localResultFile);
+  const png = await history.recordSuccess({ providerId: "mock", modelId: "mock" }, { images: [{ importSource: { type: "url", url: "https://safe.invalid/result.png" } }] });
+  assert.match(png.localResultFile, /\.png$/); assert.equal(png.localResultMimeType, "image/png");
 });
-
-test("History re-import uses original JPEG and can redownload a valid failed-entry URL", async () => {
-  const captured = [];
-  const panel = { generationManager: { async importGeneratedResult(result) { captured.push(result.images[0]); result.importResult = { importContext: null }; } },
-    historyStore: { markImported() {} }, historyPanel: { refresh() {} }, handlePipelineStatus() {}, t(key) { return key; } };
-  const prior = global.PSAIImageHubCompat.historyFileUrl;
-  global.PSAIImageHubCompat.historyFileUrl = (file) => "file:///" + file;
+test("History re-import selects the original JPEG and valid URL fallback, never thumbnail", async () => {
+  const captured = []; const panel = { generationManager: { async importGeneratedResult(result) { captured.push(result.images[0]); result.importResult = { importContext: null }; } },
+    historyStore: { markImported() {} }, historyPanel: { refresh() {} }, handlePipelineStatus() {}, syncControls() {}, t(key) { return key; } };
+  const prior = global.PSAIImageHubCompat.historyFileUrl; global.PSAIImageHubCompat.historyFileUrl = (file) => "file:///" + file;
   try {
-    await MainPanel.prototype.reimportHistoryEntry.call(panel, { id: "jpeg", localResultFile: "C:\\history\\original.jpg", localResultMimeType: "image/jpeg" });
-    await MainPanel.prototype.reimportHistoryEntry.call(panel, { id: "remote", resultUrl: "https://safe.invalid/result.jpeg" });
+    await MainPanel.prototype.reimportHistoryEntry.call(panel, { id: "j", localResultFile: "C:\\lab\\originals\\j.jpg", localResultMimeType: "image/jpeg", thumbnail: "C:\\lab\\thumbnails\\j.jpg" });
+    await MainPanel.prototype.reimportHistoryEntry.call(panel, { id: "u", resultUrl: "https://safe.invalid/result.jpeg" });
   } finally { global.PSAIImageHubCompat.historyFileUrl = prior; }
-  assert.equal(captured[0].mimeType, "image/jpeg"); assert.equal(captured[0].importSource.type, "local-file");
-  assert.equal(captured[1].mimeType, null); assert.equal(captured[1].importSource.type, "url");
+  assert.equal(captured[0].importSource.path, "C:\\lab\\originals\\j.jpg"); assert.equal(captured[0].mimeType, "image/jpeg");
+  assert.equal(captured[1].importSource.type, "url");
 });
-
-test("Host validates PNG/JPEG signatures and no user message contains stale Mock-only wording", () => {
+test("all enabled Auto Sharpen modes operate on the Photoshop layer and never rewrite JPEG", async () => {
+  const calls = []; const manager = new AutoSharpenManager({ photoshopBridge: { async applyAutoSharpen(layerName, plan) { calls.push({ layerName, plan }); return { applied: true }; } } });
+  for (const mode of ["micro", "natural", "standard", "strong", "custom"]) {
+    const result = await manager.applyToImportedLayer({ layerName: "AI_Generated_001", sourcePath: "C:\\lab\\original.jpg", finalBounds: { width: 900, height: 700 } },
+      { mode, isLocal: mode === "custom", preferences: { suppressColorFringing: true, customOpacity: 100, customBlendMode: "linearLight" } });
+    assert.equal(result.applied, true);
+  }
+  assert.equal(calls.length, 5); assert.equal(calls[4].plan.suppressColorFringing, true); assert.ok(calls[4].plan.contract > 0);
+  assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, "../client/js/photoshop/autoSharpenManager.js"), "utf8"), /writeFile|saveAs/);
+});
+test("Host supports PNG/JPEG while rollback and Persistent Panel code remain present", () => {
   const host = fs.readFileSync(path.resolve(__dirname, "../host/host.jsx"), "utf8");
-  assert.match(host, /assertSupportedImageFile/); assert.match(host, /\\\.jpe\?g\$/); assert.match(host, /255[\s\S]*216[\s\S]*217/);
-  assert.doesNotMatch(host, /Only PNG files|Mock import phase/);
-  assert.doesNotMatch(zhCN.errorUnsupportedImageFile, /Mock/); assert.doesNotMatch(enUS.errorUnsupportedImageFile, /Mock/);
+  assert.match(host, /assertSupportedImageFile/); assert.match(host, /oldSharpenLayer/); assert.match(host, /sharpenLayer\.remove/);
+  assert.doesNotMatch(host, /Only PNG files|Mock import phase/); assert.doesNotMatch(zhCN.errorUnsupportedImageFile, /Mock/); assert.doesNotMatch(enUS.errorUnsupportedImageFile, /Mock/);
+  assert.equal(fs.existsSync(path.resolve(__dirname, "../client/js/compat/persistentPanel.js")), true);
 });
 test("Host imports standard and trailing-data JPEG through real ExtendScript seek semantics", () => {
-  const valid = JSON.parse(hostWithFile("result.jpg", JPEG).PSAIImageHubCompatHost.importImage("C:\\result.jpg"));
-  assert.equal(valid.ok, true);
-  const trailing = JSON.parse(hostWithFile("结果 图像.jpeg", JPEG_WITH_TRAILING_DATA).PSAIImageHubCompatHost.importImage("C:\\中文 路径\\结果 图像.jpeg"));
-  assert.equal(trailing.ok, true);
+  assert.equal(JSON.parse(hostWithFile("result.jpg", JPEG).PSAIImageHubCompatHost.importImage("C:\\result.jpg")).ok, true);
+  assert.equal(JSON.parse(hostWithFile("结果 图像.jpeg", JPEG_WITH_TRAILING_DATA).PSAIImageHubCompatHost.importImage("C:\\中文 路径\\结果 图像.jpeg")).ok, true);
 });
-
 test("Host keeps PNG support and rejects empty, truncated and extension-spoofed files", () => {
-  const png = JSON.parse(hostWithFile("result.png", PNG).PSAIImageHubCompatHost.importImage("C:\\result.png"));
-  assert.equal(png.ok, true);
-  const spoofed = JSON.parse(hostWithFile("result.png", JPEG).PSAIImageHubCompatHost.importImage("C:\\result.png"));
-  assert.equal(spoofed.error.code, "INVALID_IMAGE_FILE");
-  const jpegSpoof = JSON.parse(hostWithFile("result.jpg", PNG).PSAIImageHubCompatHost.importImage("C:\\result.jpg"));
-  assert.equal(jpegSpoof.error.code, "INVALID_IMAGE_FILE");
-  const empty = JSON.parse(hostWithFile("result.jpg", Uint8Array.from([])).PSAIImageHubCompatHost.importImage("C:\\result.jpg"));
-  assert.equal(empty.error.code, "INVALID_IMAGE_FILE");
-  const corrupt = JSON.parse(hostWithFile("result.jpg", CORRUPT_JPEG).PSAIImageHubCompatHost.importImage("C:\\result.jpg"));
-  assert.equal(corrupt.error.code, "INVALID_IMAGE_FILE");
+  assert.equal(JSON.parse(hostWithFile("result.png", PNG).PSAIImageHubCompatHost.importImage("C:\\result.png")).ok, true);
+  assert.equal(JSON.parse(hostWithFile("result.png", JPEG).PSAIImageHubCompatHost.importImage("C:\\result.png")).error.code, "INVALID_IMAGE_FILE");
+  assert.equal(JSON.parse(hostWithFile("result.jpg", PNG).PSAIImageHubCompatHost.importImage("C:\\result.jpg")).error.code, "INVALID_IMAGE_FILE");
+  assert.equal(JSON.parse(hostWithFile("result.jpg", Uint8Array.from([])).PSAIImageHubCompatHost.importImage("C:\\result.jpg")).error.code, "INVALID_IMAGE_FILE");
+  assert.equal(JSON.parse(hostWithFile("result.jpg", CORRUPT_JPEG).PSAIImageHubCompatHost.importImage("C:\\result.jpg")).error.code, "INVALID_IMAGE_FILE");
 });

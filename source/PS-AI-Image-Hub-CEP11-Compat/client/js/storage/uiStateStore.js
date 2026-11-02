@@ -22,12 +22,13 @@
       try {
         var parsed = JSON.parse(this.storage && this.storage.getItem(STORAGE_KEY) || "null");
         return { matchMainSize: Boolean(parsed && parsed.matchMainSize === true),
-          selectionPromptConstraint: !parsed || parsed.selectionPromptConstraint !== false };
-      } catch (error) { return { matchMainSize: false, selectionPromptConstraint: true }; }
+          selectionPromptConstraint: !parsed || parsed.selectionPromptConstraint !== false,
+          generationAdvancedOpen: Boolean(parsed && parsed.generationAdvancedOpen === true) };
+      } catch (error) { return { matchMainSize: false, selectionPromptConstraint: true, generationAdvancedOpen: false }; }
     }
     savePreferences() {
       if (this.storage) this.storage.setItem(STORAGE_KEY, JSON.stringify({ matchMainSize: this.preferences.matchMainSize === true,
-        selectionPromptConstraint: this.preferences.selectionPromptConstraint !== false }));
+        selectionPromptConstraint: this.preferences.selectionPromptConstraint !== false, generationAdvancedOpen: this.preferences.generationAdvancedOpen === true }));
     }
     getModel(providerId) {
       var config = this.providerManager && this.providerManager.getProviderConfig(providerId);
@@ -44,6 +45,12 @@
         this.emit({ type: "model", providerId: providerId, modelId: modelId, origin: origin || "ui" });
         return modelId;
       } finally { this.modelUpdateInProgress = false; }
+    }
+    getGenerationAdvancedOpen() { return this.preferences.generationAdvancedOpen === true; }
+    setGenerationAdvancedOpen(enabled) {
+      var value = enabled === true;
+      if (value === this.preferences.generationAdvancedOpen) return value;
+      this.preferences.generationAdvancedOpen = value; this.savePreferences(); return value;
     }
     getMatchMainSize() { return this.preferences.matchMainSize === true; }
     setMatchMainSize(enabled, origin) {

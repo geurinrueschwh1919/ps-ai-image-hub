@@ -52,12 +52,27 @@
       if (this.explicitRoot) return this.explicitRoot;
       return join(this.photoshopBridge.getUserDataRoot(), "PSAIImageHubCompat");
     }
+    ensureRootPath() {
+      var path = this.rootPath();
+      if (!path || !this.cepFs || typeof this.cepFs.stat !== "function" || typeof this.cepFs.makedir !== "function") {
+        throw new Error("CEP storage APIs are unavailable.");
+      }
+      var stat = this.cepFs.stat(path);
+      if (stat && stat.err === 0 && isDirectory(stat)) return path;
+      var created = this.cepFs.makedir(path);
+      stat = this.cepFs.stat(path);
+      if (created && created.err !== 0 && (!stat || stat.err !== 0 || !isDirectory(stat))) {
+        throw new Error("Could not create the PS AI Image Hub data directory.");
+      }
+      if (!stat || stat.err !== 0 || !isDirectory(stat)) throw new Error("PS AI Image Hub data directory is unavailable.");
+      return path;
+    }
     classify(path) {
       var rel = normalizePath(path).slice(normalizePath(this.rootPath()).length).replace(/^\//, "").toLowerCase();
       if (rel === "sensitive-provider-config.json") return "sensitiveConfig";
       if (/^task-recovery\/.+\/(?:main-preview|ref-\d+-preview).*\.(?:png|jpe?g)$/i.test(rel)) return "recoveryImages";
       if (/^task-recovery\/.+\/metadata\.json$/i.test(rel)) return "recoveryMetadata";
-      if (/^history\/images\/.+\.(?:png|jpe?g)$/i.test(rel)) return "historyImages";
+      if (/^history\/(?:images|originals|thumbnails)\/.+\.(?:png|jpe?g|webp)$/i.test(rel)) return "historyImages";
       if (rel === "history/history.json") return "historyMetadata";
       if (/^(?:temp-import\/|reference-(?:canvas|selection)-|psai-reference-)/i.test(rel)) return "temporaryInputs";
       if (/^generated-.+\.(?:png|jpe?g)$/i.test(rel)) return "downloads";
@@ -115,7 +130,7 @@
     deleteFiles(files) {
       var rootPath = this.rootPath(), deleted = 0;
       (files || []).forEach((path) => {
-        if (!isInsideRoot(path, rootPath) || normalizePath(path).toLowerCase() === normalizePath(rootPath).toLowerCase()) throw new Error("Refusing to delete outside PSAIImageHubCompat data root.");
+        if (!isInsideRoot(path, rootPath) || normalizePath(path).toLowerCase() === normalizePath(rootPath).toLowerCase()) throw new Error("Refusing to delete outside the PS AI Image Hub data root.");
         try { var result = this.cepFs.deleteFile(path); if (!result || result.err === 0) deleted += 1; } catch (error) { /* missing files are harmless */ }
       });
       return deleted;

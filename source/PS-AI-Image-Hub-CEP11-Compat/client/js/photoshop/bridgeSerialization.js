@@ -17,11 +17,12 @@
     getPhotoshopVersion: 0,
     hasOpenDocument: 0,
     getActiveDocumentName: 0,
-    importImage: 1,
-    importSmartObjectToBounds: 5,
+    importImage: 2,
+    importSmartObjectToBounds: 6,
     getDocumentMetadata: 0,
     getSelectionBounds: 0,
-    exportReferenceImage: 2
+    exportReferenceImage: 2,
+    applyAutoSharpen: 8
   });
 
   function assertSerializableString(value) {

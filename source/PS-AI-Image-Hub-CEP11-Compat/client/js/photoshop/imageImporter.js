@@ -73,6 +73,7 @@
       this.photoshopBridge = options && options.photoshopBridge || null;
       this.imageFileStore = options && options.imageFileStore || null;
       this.importSizingManager = options && options.importSizingManager || null;
+      this.autoSharpenManager = options && options.autoSharpenManager || null;
       this.supportsProgressCallbacks = true;
     }
 
@@ -107,6 +108,7 @@
       var settings = options || {};
       var items = [];
       var importContexts = [];
+      var autoSharpenResults = [];
       for (var index = 0; index < images.length; index += 1) {
         var localFilePath;
         var materialized = null;
@@ -130,14 +132,16 @@
           if (settings.cancellationToken && settings.cancellationToken.cancelled) throw new AppError(ErrorCodes.CANCELLED, "Import was cancelled.");
           if (settings.onStatus) settings.onStatus("importing", { imageIndex: index });
           var item;
+          var expectedDocumentId = settings.mainTarget && settings.mainTarget.documentId !== undefined
+            ? settings.mainTarget.documentId : null;
           if (sizedCopy && sizedCopy.requiresPhotoshopPlacement) {
             if (typeof bridge.importSmartObjectToBounds !== "function") {
               throw new AppError(ErrorCodes.SMART_OBJECT_IMPORT_FAILED, "Photoshop Smart Object placement is unavailable.");
             }
             var placementBounds = targetBoundsFromFit(sizedCopy.fit, importTarget);
             if (!placementBounds) throw new AppError(ErrorCodes.SMART_OBJECT_IMPORT_FAILED, "Smart Object placement target is invalid.");
-            item = await bridge.importSmartObjectToBounds(localFilePath, placementBounds);
-          } else item = await bridge.importImage(localFilePath);
+            item = await bridge.importSmartObjectToBounds(localFilePath, placementBounds, expectedDocumentId);
+          } else item = await bridge.importImage(localFilePath, expectedDocumentId);
           if (!item || item.imported !== true || !item.layerName) {
             throw new AppError(ErrorCodes.PHOTOSHOP_IMPORT, "Photoshop did not confirm the imported layer.");
           }
@@ -146,6 +150,17 @@
           importContexts.push(importContext);
           logging.logger.info("IMPORT_STRATEGY_SELECTED", importContext);
           if (settings.onDiagnostic) settings.onDiagnostic("IMPORT_CONTEXT_READY", importContext);
+          if (this.autoSharpenManager && settings.autoSharpenMode && settings.autoSharpenMode !== "off") {
+            var sharpenResult = await this.autoSharpenManager.applyToImportedLayer(item, {
+              mode: settings.autoSharpenMode,
+              isLocal: settings.autoSharpenIsLocal === true,
+              importContext: importContext
+            });
+            autoSharpenResults.push(sharpenResult);
+            if (sharpenResult && sharpenResult.failed && settings.onStatus) {
+              settings.onStatus("autoSharpenFailed", { imageIndex: index, message: sharpenResult.message });
+            }
+          } else autoSharpenResults.push({ applied: false, skipped: "disabled" });
         } finally {
           if (sizedCopy && sizedCopy.transient) this.importSizingManager.remove(sizedCopy.path);
           if (materialized && materialized.transient) this.imageFileStore.remove(materialized.path);
@@ -158,7 +173,8 @@
         documentName: items[items.length - 1].documentName || null,
         items: items,
         importContext: importContexts[0] || null,
-        importContexts: importContexts
+        importContexts: importContexts,
+        autoSharpenResults: autoSharpenResults
       };
     }
   }

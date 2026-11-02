@@ -62,6 +62,9 @@
     BAILIAN_REGION_REQUIRED: "BAILIAN_REGION_REQUIRED",
     BAILIAN_REGION_UNSUPPORTED: "BAILIAN_REGION_UNSUPPORTED",
     BAILIAN_WORKSPACE_REQUIRED: "BAILIAN_WORKSPACE_REQUIRED",
+    BAILIAN_WORKSPACE_FORMAT: "BAILIAN_WORKSPACE_FORMAT",
+    BAILIAN_WORKSPACE_ENDPOINT_INVALID: "BAILIAN_WORKSPACE_ENDPOINT_INVALID",
+    BAILIAN_REGION_MISMATCH: "BAILIAN_REGION_MISMATCH",
     BAILIAN_API_KEY_REQUIRED: "BAILIAN_API_KEY_REQUIRED",
     BAILIAN_TASK_UNAVAILABLE: "BAILIAN_TASK_UNAVAILABLE",
     REQUEST_SERIALIZE_FAILED: "REQUEST_SERIALIZE_FAILED",
@@ -159,6 +162,9 @@
     keyByCode[ErrorCodes.BAILIAN_REGION_REQUIRED] = "errorBailianRegionRequired";
     keyByCode[ErrorCodes.BAILIAN_REGION_UNSUPPORTED] = "errorBailianRegionUnsupported";
     keyByCode[ErrorCodes.BAILIAN_WORKSPACE_REQUIRED] = "errorBailianWorkspaceRequired";
+    keyByCode[ErrorCodes.BAILIAN_WORKSPACE_FORMAT] = "errorBailianWorkspaceFormat";
+    keyByCode[ErrorCodes.BAILIAN_WORKSPACE_ENDPOINT_INVALID] = "errorBailianWorkspaceEndpointInvalid";
+    keyByCode[ErrorCodes.BAILIAN_REGION_MISMATCH] = "errorBailianRegionMismatch";
     keyByCode[ErrorCodes.BAILIAN_API_KEY_REQUIRED] = "errorBailianApiKeyRequired";
     keyByCode[ErrorCodes.BAILIAN_TASK_UNAVAILABLE] = "errorBailianTaskUnavailable";
     keyByCode[ErrorCodes.REQUEST_SERIALIZE_FAILED] = "errorRequestSerialize";
@@ -220,6 +226,14 @@
       t("diagnosticModel", { value: safe(details.model) }),
       t("diagnosticEndpoint", { value: safe(details.endpoint) })
     ];
+    if (details.requestId) fields.push(t("diagnosticRequestId", { value: safe(details.requestId) }));
+    if (details.endpointMode) fields.push(t("diagnosticEndpointMode", { value: safe(details.endpointMode) }));
+    if (details.region) fields.push(t("diagnosticRegion", { value: safe(details.region) }));
+    if (details.hostType) fields.push(t("diagnosticHostType", { value: safe(details.hostType) }));
+    if (details.apiHostFingerprint) fields.push(t("diagnosticApiHostFingerprint", { value: safe(details.apiHostFingerprint) }));
+    if (details.providerConfigRevision !== undefined) fields.push(t("diagnosticProviderConfigRevision", { value: safe(details.providerConfigRevision) }));
+    if (details.submitOriginFingerprint) fields.push(t("diagnosticSubmitOriginFingerprint", { value: safe(details.submitOriginFingerprint) }));
+    if (details.pollOriginFingerprint) fields.push(t("diagnosticPollOriginFingerprint", { value: safe(details.pollOriginFingerprint) }));
     if (details.payloadBytes !== undefined && details.payloadBytes !== null) fields.push(t("diagnosticPayloadBytes", { value: safe(details.payloadBytes) }));
     if (error.code === ErrorCodes.GENERATION_TIMEOUT) {
       fields.push(details.canRecover && details.taskId
